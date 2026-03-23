@@ -58,6 +58,14 @@ public class ClientPlayer {
           case CHANGE_SIZE_EVENT:
             clientController.handleAction("updateVideoSize", clientStream.readByteArrayFromMain(8), 0);
             break;
+          case 4:
+            // 收到心跳回复，计算真实RTT往返延迟
+            if (clientStream.pingSendTime != 0) {
+              long rtt = System.currentTimeMillis() - clientStream.pingSendTime;
+              statsOverlay.onLatency(rtt);
+              clientStream.pingSendTime = 0;
+            }
+            break;
         }
       }
     } catch (InterruptedException ignored) {
