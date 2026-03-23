@@ -153,7 +153,7 @@ public class ClientController implements TextureView.SurfaceTextureListener {
     handleAction("checkClipBoard", null, 0);
     handleAction("keepAlive", null, 0);
     handleAction("checkSizeAndSite", null, 0);
-    mainHandler.postDelayed(this::otherService, 2000);
+    mainHandler.postDelayed(this::otherService, 5000);
   }
 
   public void setFullView(FullActivity fullView) {
