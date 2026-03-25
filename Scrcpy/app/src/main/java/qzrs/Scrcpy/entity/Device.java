@@ -23,7 +23,7 @@ public class Device {
   public boolean wakeOnConnect = true;
   public boolean lightOffOnConnect = false;
   public boolean showNavBarOnConnect = true;
-  public boolean changeToFullOnConnect = false;
+  public boolean changeToFullOnConnect = true;
   public boolean keepWakeOnRunning = true;
   public boolean changeResolutionOnRunning = false;
   public boolean smallToMiniOnRunning = false;
