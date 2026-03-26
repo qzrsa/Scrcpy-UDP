@@ -15,6 +15,7 @@ import qzrs.Scrcpy.client.decode.DecodecTools;
 import qzrs.Scrcpy.entity.AppData;
 import qzrs.Scrcpy.entity.Device;
 import qzrs.Scrcpy.entity.MyInterface;
+import qzrs.Scrcpy.helper.Logger;
 import qzrs.Scrcpy.helper.PublicTools;
 
 public class ClientStream {
@@ -51,9 +52,13 @@ public class ClientStream {
   }
 
   public ClientStream(Device device, MyInterface.MyFunctionBoolean handle) {
+    Logger.i("ClientStream", "========== 开始连接 ==========");
+    Logger.logConnection("设备信息", "uuid=" + device.uuid + ", address=" + device.address + ", serverPort=" + device.serverPort + ", useUdpMode=" + device.useUdpMode);
+    
     Thread timeOutThread = new Thread(() -> {
       try {
         Thread.sleep(timeoutDelay);
+        Logger.e("ClientStream", "连接超时!");
         PublicTools.logToast("stream", AppData.applicationContext.getString(R.string.toast_timeout), true);
         handle.run(false);
         if (connectThread != null) connectThread.interrupt();
@@ -62,11 +67,22 @@ public class ClientStream {
     });
     connectThread = new Thread(() -> {
       try {
+        Logger.logConnection("ADB连接", "正在连接ADB...");
         adb = AdbTools.connectADB(device);
+        Logger.logConnection("ADB连接", "ADB连接成功");
+        
+        Logger.logConnection("启动服务器", "正在启动Scrcpy服务器...");
         startServer(device);
+        Logger.logConnection("启动服务器", "服务器启动完成");
+        
+        Logger.logConnection("建立连接", "正在建立视频连接...");
         connectServer(device);
+        Logger.logConnection("建立连接", "视频连接成功!");
+        
+        Logger.i("ClientStream", "========== 连接成功 ==========");
         handle.run(true);
       } catch (Exception e) {
+        Logger.e("ClientStream", "连接失败: " + e.getMessage(), e);
         PublicTools.logToast("stream", e.toString(), true);
         handle.run(false);
       } finally {
@@ -185,9 +201,26 @@ public class ClientStream {
   }
 
   public ByteBuffer readFrameFromVideo() throws Exception {
-    if (!connectDirect) videoBufferStream.flush();
+    Logger.logVideo("读取视频帧", "开始读取...");
+    
+    if (!connectDirect) {
+      Logger.logVideo("Buffer模式", "刷新缓冲区");
+      videoBufferStream.flush();
+    }
+    
+    Logger.logVideo("读取", "等待视频数据...");
     int size = readIntFromVideo();
-    return readByteArrayFromVideo(size);
+    Logger.logVideo("读取", "视频帧大小: " + size + " bytes");
+    
+    if (size <= 0) {
+      Logger.w("ClientStream", "警告: 视频帧大小为 " + size);
+      return ByteBuffer.allocate(0);
+    }
+    
+    ByteBuffer frame = readByteArrayFromVideo(size);
+    Logger.logVideo("读取", "视频帧完成: " + frame.remaining() + " bytes");
+    
+    return frame;
   }
 
   public void writeToMain(ByteBuffer byteBuffer) throws Exception {
