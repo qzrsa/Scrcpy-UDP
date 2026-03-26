@@ -43,7 +43,7 @@ public class Device {
   public int miniY = 200;
 
   // ========== UDP相关配置 ==========
-  public boolean useUdpMode = true;           // 启用UDP模式
+  public boolean useUdpMode = false;          // 暂时关闭UDP，使用TCP测试
   public String signalingServer = "";         // 信令服务器地址
   public int signalingPort = 8888;            // 信令服务器端口
   public String relayServer = "";             // 中继服务器地址(可选)
