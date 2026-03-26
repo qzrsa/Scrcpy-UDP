@@ -65,6 +65,7 @@ public class MainActivity extends Activity {
   private void setButtonListener() {
     activityMainBinding.buttonAdd.setOnClickListener(v -> startActivity(new Intent(this, DeviceDetailActivity.class)));
     activityMainBinding.buttonSet.setOnClickListener(v -> startActivity(new Intent(this, SetActivity.class)));
+    activityMainBinding.buttonLog.setOnClickListener(v -> startActivity(new Intent(this, LogActivity.class)));
   }
 
   @Override
