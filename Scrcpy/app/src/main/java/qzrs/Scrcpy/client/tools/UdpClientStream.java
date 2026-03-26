@@ -247,7 +247,7 @@ public class UdpClientStream extends ClientStream {
     /**
      * 读取字节数组
      */
-    public ByteBuffer readByteArrayFromVideo(int size) throws IOException, InterruptedException {
+    public ByteBuffer readByteArrayFromVideo(int size) throws Exception {
         ByteBuffer result = ByteBuffer.allocate(size);
         ByteBuffer buffer = readFrameFromVideo();
         
@@ -269,7 +269,7 @@ public class UdpClientStream extends ClientStream {
     /**
      * 读取字节
      */
-    public byte readByteFromVideo() throws IOException, InterruptedException {
+    public byte readByteFromVideo() throws Exception {
         ByteBuffer buffer = readFrameFromVideo();
         return buffer.get();
     }
@@ -277,7 +277,7 @@ public class UdpClientStream extends ClientStream {
     /**
      * 读取整数
      */
-    public int readIntFromVideo() throws IOException, InterruptedException {
+    public int readIntFromVideo() throws Exception {
         ByteBuffer buffer = readFrameFromVideo();
         return buffer.getInt();
     }
