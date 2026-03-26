@@ -1,0 +1,16 @@
+{
+  "name": "scrcpy-udp-signaling",
+  "version": "1.0.0",
+  "description": "Scrcpy UDP Signaling Server",
+  "main": "signaling-server.js",
+  "scripts": {
+    "start": "node signaling-server.js",
+    "dev": "node signaling-server.js"
+  },
+  "keywords": ["scrcpy", "udp", "signaling", "webrtc"],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "ws": "^8.14.0"
+  }
+}

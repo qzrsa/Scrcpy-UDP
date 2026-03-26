@@ -42,6 +42,13 @@ public class Device {
   public int smallLengthLan = 800;
   public int miniY = 200;
 
+  // ========== UDP相关配置 ==========
+  public boolean useUdpMode = true;           // 启用UDP模式
+  public String signalingServer = "";         // 信令服务器地址
+  public int signalingPort = 8888;            // 信令服务器端口
+  public String relayServer = "";             // 中继服务器地址(可选)
+  public int relayPort = 3479;               // 中继服务器端口
+
   public Device(String uuid, int type) {
     this.uuid = uuid;
     this.type = type;
@@ -97,6 +104,14 @@ public class Device {
     newDevice.smallYLan = smallYLan;
     newDevice.smallLengthLan = smallLengthLan;
     newDevice.miniY = miniY;
+    
+    // 复制UDP配置
+    newDevice.useUdpMode = useUdpMode;
+    newDevice.signalingServer = signalingServer;
+    newDevice.signalingPort = signalingPort;
+    newDevice.relayServer = relayServer;
+    newDevice.relayPort = relayPort;
+    
     return newDevice;
   }
 }
