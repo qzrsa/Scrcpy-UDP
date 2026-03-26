@@ -24,7 +24,8 @@ public class Client {
   private boolean isClosed = false;
 
   // 组件
-  private ClientStream clientStream = null;
+  private ClientStream tcpClientStream = null;
+  private UdpClientStream udpClientStream = null;
   private ClientController clientController = null;
   private ClientPlayer clientPlayer = null;
   private Device device;
@@ -41,11 +42,11 @@ public class Client {
     if (useUdpMode) {
       // UDP模式
       PublicTools.logToast("Client", "使用UDP模式连接...", true);
-      clientStream = new UdpClientStream(device, bool -> {
+      udpClientStream = new UdpClientStream(device, bool -> {
         if (bool) {
           allClient.put(device.uuid, this);
           // 控制器、播放器
-          clientController = new ClientController(device, clientStream, () -> clientPlayer = new ClientPlayer(device.uuid, clientStream));
+          clientController = new ClientController(device, this, () -> clientPlayer = new ClientPlayer(device.uuid, this));
           // 临时设备
           boolean isTempDevice = device.isTempDevice();
           // 启动界面
@@ -59,11 +60,11 @@ public class Client {
       });
     } else {
       // TCP模式 (原有逻辑)
-      clientStream = new ClientStream(device, bool -> {
+      tcpClientStream = new ClientStream(device, bool -> {
         if (bool) {
           allClient.put(device.uuid, this);
           // 控制器、播放器
-          clientController = new ClientController(device, clientStream, () -> clientPlayer = new ClientPlayer(device.uuid, clientStream));
+          clientController = new ClientController(device, tcpClientStream, () -> clientPlayer = new ClientPlayer(device.uuid, tcpClientStream));
           // 临时设备
           boolean isTempDevice = device.isTempDevice();
           // 启动界面
@@ -125,7 +126,11 @@ public class Client {
     // 关闭组件
     if (clientPlayer != null) clientPlayer.close();
     if (clientController != null) clientController.close();
-    if (clientStream != null) clientStream.close();
+    if (useUdpMode && udpClientStream != null) {
+      udpClientStream.close();
+    } else if (tcpClientStream != null) {
+      tcpClientStream.close();
+    }
     // 如果设置了自动重连
     if (byteBuffer != null) {
       PublicTools.logToast("Client", new String(byteBuffer.array()), true);
