@@ -54,7 +54,7 @@
       android:layout_height="45dp"
       android:layout_marginStart="5dp"
       android:padding="10dp"
-      android:src="@drawable/baseline_assignment_black_24dp"
+      android:src="@drawable/ic_log"
       android:tint="@color/onBackground" />
 
   </LinearLayout>
