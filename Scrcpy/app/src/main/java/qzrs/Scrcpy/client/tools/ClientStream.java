@@ -18,18 +18,18 @@ import qzrs.Scrcpy.entity.MyInterface;
 import qzrs.Scrcpy.helper.PublicTools;
 
 public class ClientStream {
-  private boolean isClose = false;
-  private boolean connectDirect = false;
-  private Adb adb;
-  private Socket mainSocket;
-  private Socket videoSocket;
-  private OutputStream mainOutputStream;
-  private DataInputStream mainDataInputStream;
-  private DataInputStream videoDataInputStream;
-  private BufferStream mainBufferStream;
-  private BufferStream videoBufferStream;
-  private BufferStream shell;
-  private Thread connectThread = null;
+  protected boolean isClose = false;
+  protected boolean connectDirect = false;
+  protected Adb adb;
+  protected Socket mainSocket;
+  protected Socket videoSocket;
+  protected OutputStream mainOutputStream;
+  protected DataInputStream mainDataInputStream;
+  protected DataInputStream videoDataInputStream;
+  protected BufferStream mainBufferStream;
+  protected BufferStream videoBufferStream;
+  protected BufferStream shell;
+  protected Thread connectThread = null;
   private static final String serverName = "/data/local/tmp/scrcpy_server_" + BuildConfig.VERSION_CODE + ".jar";
   private static final boolean supportH265 = DecodecTools.isSupportH265();
   private static final boolean supportOpus = DecodecTools.isSupportOpus();
@@ -44,6 +44,10 @@ public class ClientStream {
 
   public StatsOverlay getStatsOverlay() {
     return statsOverlay;
+  }
+
+  public ClientStream() {
+    // Empty constructor for inheritance
   }
 
   public ClientStream(Device device, MyInterface.MyFunctionBoolean handle) {

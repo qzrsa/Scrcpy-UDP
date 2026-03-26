@@ -24,7 +24,7 @@ import qzrs.Scrcpy.network.UdpChannelWithAck;
  * 支持P2P直连和中继模式
  * 实现与ClientStream相同的接口
  */
-public class UdpClientStream {
+public class UdpClientStream extends ClientStream {
     
     private boolean isClose = false;
     private boolean isConnected = false;
@@ -49,26 +49,26 @@ public class UdpClientStream {
     private Thread videoReceiveThread;
     private Thread controlReceiveThread;
     
-    // 设备信息
-    private Device device;
-    private Adb adb;
-    private BufferStream shell;
+    // 设备信息 - 使用继承的 protected 字段
     
-    // 统计信息
-    private final StatsOverlay statsOverlay = new StatsOverlay();
-    public long pingSendTime = 0;
+    // 统计信息 - 使用继承的字段
+    // pingSendTime - 使用继承的字段
     
     private static final String serverName = "/data/local/tmp/scrcpy_server_" + BuildConfig.VERSION_CODE + ".jar";
     private static final boolean supportH265 = DecodecTools.isSupportH265();
     private static final boolean supportOpus = DecodecTools.isSupportOpus();
     private static final int timeoutDelay = 1000 * 15;
     
+    // 重写父类的 statsOverlay
+    private final StatsOverlay statsOverlay = new StatsOverlay();
+    public long pingSendTime = 0;
+    
     public StatsOverlay getStatsOverlay() {
         return statsOverlay;
     }
     
     public UdpClientStream(Device device, MyInterface.MyFunctionBoolean handle) {
-        this.device = device;
+        super(); // 调用空构造函数
         
         // 创建超时线程
         Thread timeOutThread = new Thread(() -> {

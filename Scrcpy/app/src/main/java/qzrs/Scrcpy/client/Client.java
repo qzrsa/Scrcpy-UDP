@@ -24,59 +24,43 @@ public class Client {
   private boolean isClosed = false;
 
   // 组件
-  private ClientStream tcpClientStream = null;
-  private UdpClientStream udpClientStream = null;
+  private ClientStream clientStream = null;
   private ClientController clientController = null;
   private ClientPlayer clientPlayer = null;
   private Device device;
-  private boolean useUdpMode = false;
 
   public Client(Device device) {
     if (allClient.containsKey(device.uuid)) return;
     this.device = device;
-    this.useUdpMode = device.useUdpMode;
     Pair<ItemLoadingBinding, Dialog> loading = ViewTools.createLoading(AppData.mainActivity);
     loading.second.show();
     
     // 根据模式选择连接方式
-    if (useUdpMode) {
+    if (device.useUdpMode) {
       // UDP模式
       PublicTools.logToast("Client", "使用UDP模式连接...", true);
-      udpClientStream = new UdpClientStream(device, bool -> {
-        if (bool) {
-          allClient.put(device.uuid, this);
-          // 控制器、播放器
-          clientController = new ClientController(device, this, () -> clientPlayer = new ClientPlayer(device.uuid, this));
-          // 临时设备
-          boolean isTempDevice = device.isTempDevice();
-          // 启动界面
-          clientController.handleAction(device.changeToFullOnConnect ? "changeToFull" : "changeToSmall", null, 0);
-          // 运行启动时操作
-          if (device.customResolutionOnConnect) clientController.handleAction("writeByteBuffer", ControlPacket.createChangeResolutionEvent(device.customResolutionWidth, device.customResolutionHeight), 0);
-          if (!isTempDevice && device.wakeOnConnect) clientController.handleAction("buttonWake", null, 0);
-          if (!isTempDevice && device.lightOffOnConnect) clientController.handleAction("buttonLightOff", null, 2000);
-        }
-        if (loading.second.isShowing()) loading.second.cancel();
-      });
+      clientStream = new UdpClientStream(device, bool -> onConnected(bool, loading));
     } else {
-      // TCP模式 (原有逻辑)
-      tcpClientStream = new ClientStream(device, bool -> {
-        if (bool) {
-          allClient.put(device.uuid, this);
-          // 控制器、播放器
-          clientController = new ClientController(device, tcpClientStream, () -> clientPlayer = new ClientPlayer(device.uuid, tcpClientStream));
-          // 临时设备
-          boolean isTempDevice = device.isTempDevice();
-          // 启动界面
-          clientController.handleAction(device.changeToFullOnConnect ? "changeToFull" : "changeToSmall", null, 0);
-          // 运行启动时操作
-          if (device.customResolutionOnConnect) clientController.handleAction("writeByteBuffer", ControlPacket.createChangeResolutionEvent(device.customResolutionWidth, device.customResolutionHeight), 0);
-          if (!isTempDevice && device.wakeOnConnect) clientController.handleAction("buttonWake", null, 0);
-          if (!isTempDevice && device.lightOffOnConnect) clientController.handleAction("buttonLightOff", null, 2000);
-        }
-        if (loading.second.isShowing()) loading.second.cancel();
-      });
+      // TCP模式
+      clientStream = new ClientStream(device, bool -> onConnected(bool, loading));
     }
+  }
+  
+  private void onConnected(boolean bool, Pair<ItemLoadingBinding, Dialog> loading) {
+    if (bool) {
+      allClient.put(device.uuid, this);
+      // 控制器、播放器
+      clientController = new ClientController(device, clientStream, () -> clientPlayer = new ClientPlayer(device.uuid, clientStream));
+      // 临时设备
+      boolean isTempDevice = device.isTempDevice();
+      // 启动界面
+      clientController.handleAction(device.changeToFullOnConnect ? "changeToFull" : "changeToSmall", null, 0);
+      // 运行启动时操作
+      if (device.customResolutionOnConnect) clientController.handleAction("writeByteBuffer", ControlPacket.createChangeResolutionEvent(device.customResolutionWidth, device.customResolutionHeight), 0);
+      if (!isTempDevice && device.wakeOnConnect) clientController.handleAction("buttonWake", null, 0);
+      if (!isTempDevice && device.lightOffOnConnect) clientController.handleAction("buttonLightOff", null, 2000);
+    }
+    if (loading.second.isShowing()) loading.second.cancel();
   }
 
   public static void startDevice(Device device) {
@@ -126,11 +110,7 @@ public class Client {
     // 关闭组件
     if (clientPlayer != null) clientPlayer.close();
     if (clientController != null) clientController.close();
-    if (useUdpMode && udpClientStream != null) {
-      udpClientStream.close();
-    } else if (tcpClientStream != null) {
-      tcpClientStream.close();
-    }
+    if (clientStream != null) clientStream.close();
     // 如果设置了自动重连
     if (byteBuffer != null) {
       PublicTools.logToast("Client", new String(byteBuffer.array()), true);
