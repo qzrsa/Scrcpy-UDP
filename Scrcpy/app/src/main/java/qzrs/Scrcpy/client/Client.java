@@ -12,6 +12,7 @@ import qzrs.Scrcpy.client.tools.ClientController;
 import qzrs.Scrcpy.client.tools.ClientPlayer;
 import qzrs.Scrcpy.client.tools.ClientStream;
 import qzrs.Scrcpy.client.tools.ControlPacket;
+import qzrs.Scrcpy.client.tools.UdpClientStream;
 import qzrs.Scrcpy.databinding.ItemLoadingBinding;
 import qzrs.Scrcpy.entity.AppData;
 import qzrs.Scrcpy.entity.Device;
@@ -27,29 +28,54 @@ public class Client {
   private ClientController clientController = null;
   private ClientPlayer clientPlayer = null;
   private Device device;
+  private boolean useUdpMode = false;
 
   public Client(Device device) {
     if (allClient.containsKey(device.uuid)) return;
     this.device = device;
+    this.useUdpMode = device.useUdpMode;
     Pair<ItemLoadingBinding, Dialog> loading = ViewTools.createLoading(AppData.mainActivity);
     loading.second.show();
-    // 连接
-    clientStream = new ClientStream(device, bool -> {
-      if (bool) {
-        allClient.put(device.uuid, this);
-        // 控制器、播放器
-        clientController = new ClientController(device, clientStream, () -> clientPlayer = new ClientPlayer(device.uuid, clientStream));
-        // 临时设备
-        boolean isTempDevice = device.isTempDevice();
-        // 启动界面
-        clientController.handleAction(device.changeToFullOnConnect ? "changeToFull" : "changeToSmall", null, 0);
-        // 运行启动时操作
-        if (device.customResolutionOnConnect) clientController.handleAction("writeByteBuffer", ControlPacket.createChangeResolutionEvent(device.customResolutionWidth, device.customResolutionHeight), 0);
-        if (!isTempDevice && device.wakeOnConnect) clientController.handleAction("buttonWake", null, 0);
-        if (!isTempDevice && device.lightOffOnConnect) clientController.handleAction("buttonLightOff", null, 2000);
-      }
-      if (loading.second.isShowing()) loading.second.cancel();
-    });
+    
+    // 根据模式选择连接方式
+    if (useUdpMode) {
+      // UDP模式
+      PublicTools.logToast("Client", "使用UDP模式连接...", true);
+      clientStream = new UdpClientStream(device, bool -> {
+        if (bool) {
+          allClient.put(device.uuid, this);
+          // 控制器、播放器
+          clientController = new ClientController(device, clientStream, () -> clientPlayer = new ClientPlayer(device.uuid, clientStream));
+          // 临时设备
+          boolean isTempDevice = device.isTempDevice();
+          // 启动界面
+          clientController.handleAction(device.changeToFullOnConnect ? "changeToFull" : "changeToSmall", null, 0);
+          // 运行启动时操作
+          if (device.customResolutionOnConnect) clientController.handleAction("writeByteBuffer", ControlPacket.createChangeResolutionEvent(device.customResolutionWidth, device.customResolutionHeight), 0);
+          if (!isTempDevice && device.wakeOnConnect) clientController.handleAction("buttonWake", null, 0);
+          if (!isTempDevice && device.lightOffOnConnect) clientController.handleAction("buttonLightOff", null, 2000);
+        }
+        if (loading.second.isShowing()) loading.second.cancel();
+      });
+    } else {
+      // TCP模式 (原有逻辑)
+      clientStream = new ClientStream(device, bool -> {
+        if (bool) {
+          allClient.put(device.uuid, this);
+          // 控制器、播放器
+          clientController = new ClientController(device, clientStream, () -> clientPlayer = new ClientPlayer(device.uuid, clientStream));
+          // 临时设备
+          boolean isTempDevice = device.isTempDevice();
+          // 启动界面
+          clientController.handleAction(device.changeToFullOnConnect ? "changeToFull" : "changeToSmall", null, 0);
+          // 运行启动时操作
+          if (device.customResolutionOnConnect) clientController.handleAction("writeByteBuffer", ControlPacket.createChangeResolutionEvent(device.customResolutionWidth, device.customResolutionHeight), 0);
+          if (!isTempDevice && device.wakeOnConnect) clientController.handleAction("buttonWake", null, 0);
+          if (!isTempDevice && device.lightOffOnConnect) clientController.handleAction("buttonLightOff", null, 2000);
+        }
+        if (loading.second.isShowing()) loading.second.cancel();
+      });
+    }
   }
 
   public static void startDevice(Device device) {
