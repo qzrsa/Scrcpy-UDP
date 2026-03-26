@@ -237,6 +237,7 @@ public class UdpClientStream extends ClientStream {
     /**
      * 读取视频帧
      */
+    @Override
     public ByteBuffer readFrameFromVideo() throws Exception {
         if (!isConnected) {
             throw new IOException("Not connected");
@@ -247,19 +248,24 @@ public class UdpClientStream extends ClientStream {
     /**
      * 读取字节数组
      */
-    public ByteBuffer readByteArrayFromVideo(int size) throws Exception {
+    @Override
+    public ByteBuffer readByteArrayFromVideo(int size) throws IOException, InterruptedException {
         ByteBuffer result = ByteBuffer.allocate(size);
-        ByteBuffer buffer = readFrameFromVideo();
-        
-        int remaining = buffer.remaining();
-        if (remaining >= size) {
-            for (int i = 0; i < size; i++) {
-                result.put(buffer.get());
+        try {
+            ByteBuffer buffer = readFrameFromVideo();
+            
+            int remaining = buffer.remaining();
+            if (remaining >= size) {
+                for (int i = 0; i < size; i++) {
+                    result.put(buffer.get());
+                }
+            } else {
+                while (buffer.hasRemaining()) {
+                    result.put(buffer.get());
+                }
             }
-        } else {
-            while (buffer.hasRemaining()) {
-                result.put(buffer.get());
-            }
+        } catch (Exception e) {
+            throw new IOException(e);
         }
         
         result.flip();
@@ -269,17 +275,27 @@ public class UdpClientStream extends ClientStream {
     /**
      * 读取字节
      */
-    public byte readByteFromVideo() throws Exception {
-        ByteBuffer buffer = readFrameFromVideo();
-        return buffer.get();
+    @Override
+    public byte readByteFromVideo() throws IOException, InterruptedException {
+        try {
+            ByteBuffer buffer = readFrameFromVideo();
+            return buffer.get();
+        } catch (Exception e) {
+            throw new IOException(e);
+        }
     }
     
     /**
      * 读取整数
      */
-    public int readIntFromVideo() throws Exception {
-        ByteBuffer buffer = readFrameFromVideo();
-        return buffer.getInt();
+    @Override
+    public int readIntFromVideo() throws IOException, InterruptedException {
+        try {
+            ByteBuffer buffer = readFrameFromVideo();
+            return buffer.getInt();
+        } catch (Exception e) {
+            throw new IOException(e);
+        }
     }
     
     /**
