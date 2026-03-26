@@ -2,173 +2,297 @@ package qzrs.Scrcpy.client.tools;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
+import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.LinkedBlockingQueue;
 
+import qzrs.Scrcpy.BuildConfig;
+import qzrs.Scrcpy.R;
+import qzrs.Scrcpy.adb.Adb;
+import qzrs.Scrcpy.buffer.BufferStream;
+import qzrs.Scrcpy.client.decode.DecodecTools;
+import qzrs.Scrcpy.entity.AppData;
 import qzrs.Scrcpy.entity.Device;
+import qzrs.Scrcpy.entity.MyInterface;
+import qzrs.Scrcpy.helper.PublicTools;
 import qzrs.Scrcpy.network.ConnectionManager;
 import qzrs.Scrcpy.network.StunClient;
+import qzrs.Scrcpy.network.UdpChannel;
+import qzrs.Scrcpy.network.UdpChannelWithAck;
 
 /**
  * UDP模式的ClientStream
- * 替换原有的TCP连接方式，支持P2P直连和中继
+ * 支持P2P直连和中继模式
  */
 public class UdpClientStream {
     
     private boolean isClose = false;
+    private boolean isConnected = false;
     
-    // UDP连接管理器
+    // 信令服务器配置
+    private static final String SIGNALING_SERVER = "47.105.67.198";
+    private static final int SIGNALING_PORT = 8888;
+    private static final int UDP_RELAY_PORT = 3479;
+    
+    // 连接管理器
     private ConnectionManager connectionManager;
     
-    // 连接模式
-    private ConnectionManager.ConnectionMode connectionMode;
+    // UDP通道
+    private UdpChannel videoChannel;
+    private UdpChannelWithAck controlChannel;
     
-    // 设备信息
-    private Device device;
+    // 接收队列
+    private final BlockingQueue<ByteBuffer> videoReceiveQueue = new LinkedBlockingQueue<>();
+    private final BlockingQueue<ByteBuffer> controlReceiveQueue = new LinkedBlockingQueue<>();
     
-    // 回调
-    private StreamCallback callback;
+    // 接收线程
+    private Thread videoReceiveThread;
+    private Thread controlReceiveThread;
     
-    /**
-     * 连接结果
-     */
-    public static class ConnectResult {
-        public boolean success;
-        public ConnectionManager.ConnectionMode mode;
-        public String errorMessage;
-        public StunClient.NatInfo natInfo;
+    // 原有的ADB连接
+    private Adb adb;
+    private BufferStream shell;
+    
+    private static final String serverName = "/data/local/tmp/scrcpy_server_" + BuildConfig.VERSION_CODE + ".jar";
+    private static final boolean supportH265 = DecodecTools.isSupportH265();
+    private static final boolean supportOpus = DecodecTools.isSupportOpus();
+    private static final int timeoutDelay = 1000 * 15;
+    
+    // 统计信息
+    private final StatsOverlay statsOverlay = new StatsOverlay();
+    public long pingSendTime = 0;
+    
+    public StatsOverlay getStatsOverlay() {
+        return statsOverlay;
     }
     
-    /**
-     * 构造UDP流客户端
-     */
-    public UdpClientStream(Device device, StreamCallback callback) {
-        this.device = device;
-        this.callback = callback;
-    }
-    
-    /**
-     * 连接到服务器(尝试UDP P2P或中继)
-     */
-    public ConnectResult connect() {
-        ConnectResult result = new ConnectResult();
+    public UdpClientStream(Device device, MyInterface.MyFunctionBoolean handle) {
+        // 创建超时线程
+        Thread timeOutThread = new Thread(() -> {
+            try {
+                Thread.sleep(timeoutDelay);
+                PublicTools.logToast("UDP", "连接超时", true);
+                handle.run(false);
+            } catch (InterruptedException ignored) {}
+        });
+        timeOutThread.start();
         
+        // 创建连接线程
+        Thread connectThread = new Thread(() -> {
+            try {
+                // 1. 通过ADB连接设备并启动服务器
+                adb = AdbTools.connectADB(device);
+                startServer(device);
+                
+                // 2. 建立UDP连接
+                if (connectUdp(device)) {
+                    isConnected = true;
+                    handle.run(true);
+                } else {
+                    PublicTools.logToast("UDP", "UDP连接失败", true);
+                    handle.run(false);
+                }
+            } catch (Exception e) {
+                PublicTools.logToast("UDP", "错误: " + e.getMessage(), true);
+                handle.run(false);
+            } finally {
+                timeOutThread.interrupt();
+            }
+        });
+        connectThread.start();
+    }
+    
+    /**
+     * 启动Scrcpy服务器
+     */
+    private void startServer(Device device) throws Exception {
+        String serverCheck = adb.runAdbCmd("ls /data/local/tmp/scrcpy_*");
+        if (serverCheck.isEmpty() || !serverCheck.contains(serverName)) {
+            adb.runAdbCmd("rm /data/local/tmp/scrcpy_* ");
+            adb.pushFile(AppData.applicationContext.getResources().openRawResource(R.raw.scrcpy_server), serverName, null);
+        }
+        shell = adb.getShell();
+        
+        // 启动服务器
+        String cmd = "app_process -Djava.class.path=" + serverName + " / qzrs.Scrcpy.server.Server"
+            + " serverPort=" + device.serverPort
+            + " listenClip=" + (device.listenClip ? 1 : 0)
+            + " isAudio=" + (device.isAudio ? 1 : 0)
+            + " maxSize=" + device.maxSize
+            + " maxFps=" + device.maxFps
+            + " maxVideoBit=" + device.maxVideoBit
+            + " keepAwake=" + (device.keepWakeOnRunning ? 1 : 0)
+            + " supportH265=" + ((device.useH265 && supportH265) ? 1 : 0)
+            + " supportOpus=" + (supportOpus ? 1 : 0)
+            + " startApp=" + device.startApp + " \n";
+        
+        shell.write(ByteBuffer.wrap(cmd.getBytes()));
+        Thread.sleep(1000);
+    }
+    
+    /**
+     * 建立UDP连接
+     */
+    private boolean connectUdp(Device device) {
         try {
-            // 创建连接管理器
-            String serverAddr = getServerAddress();
-            int serverPort = device.signalingPort;
+            PublicTools.logToast("UDP", "正在建立UDP连接...", true);
             
+            // 1. 查询本地NAT信息
+            StunClient stun = new StunClient();
+            StunClient.NatInfo natInfo = stun.queryPublicAddress();
+            if (natInfo.success) {
+                PublicTools.logToast("UDP", "NAT: " + natInfo.publicIp + ":" + natInfo.publicPort, true);
+            }
+            
+            // 2. 获取服务器地址
+            String serverAddr = SIGNALING_SERVER;
+            if (device.signalingServer != null && !device.signalingServer.isEmpty()) {
+                serverAddr = device.signalingServer;
+            }
+            
+            int serverPort = SIGNALING_PORT;
+            if (device.signalingPort > 0) {
+                serverPort = device.signalingPort;
+            }
+            
+            // 3. 创建连接管理器
             connectionManager = new ConnectionManager(serverAddr, serverPort);
             connectionManager.setListener(new ConnectionManager.ConnectionListener() {
                 @Override
                 public void onConnected(ConnectionManager.ConnectionMode mode) {
-                    if (callback != null) {
-                        callback.onConnected(mode);
-                    }
+                    PublicTools.logToast("UDP", "连接模式: " + mode.getDescription(), true);
                 }
                 
                 @Override
                 public void onConnectFailed(String reason) {
-                    if (callback != null) {
-                        callback.onConnectFailed(reason);
-                    }
+                    PublicTools.logToast("UDP", "连接失败: " + reason, true);
                 }
                 
                 @Override
                 public void onDisconnected() {
-                    if (callback != null) {
-                        callback.onDisconnected();
-                    }
+                    PublicTools.logToast("UDP", "连接断开", true);
                 }
             });
             
-            // 执行连接(自动选择最优路径)
+            // 4. 执行连接
             boolean connected = connectionManager.connect();
             
-            result.success = connected;
-            result.mode = connectionManager.getCurrentMode();
-            result.natInfo = connectionManager.getNatInfo();
-            
-            if (!connected) {
-                result.errorMessage = "所有连接策略均失败";
+            if (connected) {
+                // 5. 创建UDP通道
+                videoChannel = new UdpChannel(SIGNALING_SERVER, UDP_RELAY_PORT);
+                controlChannel = new UdpChannelWithAck(SIGNALING_SERVER, UDP_RELAY_PORT);
+                
+                // 6. 启动接收线程
+                startReceiveThreads();
+                
+                PublicTools.logToast("UDP", "UDP连接成功! 模式: " + connectionManager.getCurrentMode().getDescription(), true);
+                return true;
             }
             
-            return result;
+            return false;
             
         } catch (Exception e) {
-            result.success = false;
-            result.errorMessage = e.getMessage();
-            return result;
+            PublicTools.logToast("UDP", "UDP异常: " + e.getMessage(), true);
+            e.printStackTrace();
+            return false;
         }
     }
     
     /**
-     * 获取服务器地址
+     * 启动接收线程
      */
-    private String getServerAddress() {
-        // 如果配置了中继服务器,使用中继地址
-        if (device.relayServer != null && !device.relayServer.isEmpty()) {
-            return device.relayServer;
-        }
-        // 否则使用信令服务器地址
-        return device.signalingServer;
+    private void startReceiveThreads() {
+        // 视频接收线程
+        videoReceiveThread = new Thread(() -> {
+            while (!isClose && videoChannel != null) {
+                try {
+                    ByteBuffer frame = videoChannel.read(65535);
+                    videoReceiveQueue.offer(frame);
+                } catch (Exception e) {
+                    if (!isClose) break;
+                }
+            }
+        });
+        videoReceiveThread.setName("UDP-Video-Receiver");
+        videoReceiveThread.start();
+        
+        // 控制接收线程
+        controlReceiveThread = new Thread(() -> {
+            while (!isClose && controlChannel != null) {
+                try {
+                    ByteBuffer data = controlChannel.read(4096);
+                    controlReceiveQueue.offer(data);
+                } catch (Exception e) {
+                    if (!isClose) break;
+                }
+            }
+        });
+        controlReceiveThread.setName("UDP-Control-Receiver");
+        controlReceiveThread.start();
     }
     
     /**
-     * 发送视频帧(UDP)
+     * 读取视频帧
      */
-    public void sendVideoFrame(ByteBuffer frame) throws IOException {
-        if (connectionManager != null) {
-            connectionManager.sendVideo(frame);
+    public ByteBuffer readFrameFromVideo() throws Exception {
+        if (!isConnected) {
+            throw new IOException("Not connected");
         }
+        return videoReceiveQueue.take();
     }
     
     /**
-     * 发送控制指令(UDP带确认)
+     * 读取字节数组
+     */
+    public ByteBuffer readByteArrayFromVideo(int size) throws IOException, InterruptedException {
+        ByteBuffer result = ByteBuffer.allocate(size);
+        ByteBuffer buffer = readFrameFromVideo();
+        
+        int remaining = buffer.remaining();
+        if (remaining >= size) {
+            for (int i = 0; i < size; i++) {
+                result.put(buffer.get());
+            }
+        } else {
+            while (buffer.hasRemaining()) {
+                result.put(buffer.get());
+            }
+        }
+        
+        result.flip();
+        return result;
+    }
+    
+    /**
+     * 读取字节
+     */
+    public byte readByteFromVideo() throws IOException, InterruptedException {
+        ByteBuffer buffer = readFrameFromVideo();
+        return buffer.get();
+    }
+    
+    /**
+     * 读取整数
+     */
+    public int readIntFromVideo() throws IOException, InterruptedException {
+        ByteBuffer buffer = readFrameFromVideo();
+        return buffer.getInt();
+    }
+    
+    /**
+     * 发送控制指令
      */
     public void sendControl(ByteBuffer control) throws IOException {
-        if (connectionManager != null) {
-            connectionManager.sendControl(control);
+        if (controlChannel != null) {
+            controlChannel.write(control);
         }
     }
     
     /**
-     * 接收视频数据
+     * 发送keepAlive并测量延迟
      */
-    public ByteBuffer receiveVideo() throws IOException, InterruptedException {
-        if (connectionManager != null) {
-            return connectionManager.receiveVideo();
-        }
-        throw new IOException("Not connected");
-    }
-    
-    /**
-     * 接收控制数据
-     */
-    public ByteBuffer receiveControl() throws IOException, InterruptedException {
-        if (connectionManager != null) {
-            return connectionManager.receiveControl();
-        }
-        throw new IOException("Not connected");
-    }
-    
-    /**
-     * 获取当前连接模式
-     */
-    public ConnectionManager.ConnectionMode getConnectionMode() {
-        return connectionManager != null ? connectionManager.getCurrentMode() : null;
-    }
-    
-    /**
-     * 是否使用UDP
-     */
-    public boolean isUdpMode() {
-        return connectionManager != null && connectionManager.isUdpMode();
-    }
-    
-    /**
-     * 获取NAT信息
-     */
-    public StunClient.NatInfo getNatInfo() {
-        return connectionManager != null ? connectionManager.getNatInfo() : null;
+    public void writeToMainWithLatency(ByteBuffer byteBuffer) throws Exception {
+        pingSendTime = System.currentTimeMillis();
+        sendControl(byteBuffer);
     }
     
     /**
@@ -178,18 +302,37 @@ public class UdpClientStream {
         if (isClose) return;
         isClose = true;
         
+        if (shell != null) {
+            try { shell.close(); } catch (Exception ignored) {}
+        }
+        if (videoChannel != null) {
+            try { videoChannel.close(); } catch (Exception ignored) {}
+        }
+        if (controlChannel != null) {
+            try { controlChannel.close(); } catch (Exception ignored) {}
+        }
         if (connectionManager != null) {
             connectionManager.close();
-            connectionManager = null;
         }
+        
+        videoReceiveQueue.clear();
+        controlReceiveQueue.clear();
     }
     
     /**
-     * 流回调接口
+     * 检查是否已连接
      */
-    public interface StreamCallback {
-        void onConnected(ConnectionManager.ConnectionMode mode);
-        void onConnectFailed(String reason);
-        void onDisconnected();
+    public boolean isConnected() {
+        return isConnected;
+    }
+    
+    /**
+     * 获取当前连接模式
+     */
+    public String getConnectionMode() {
+        if (connectionManager != null) {
+            return connectionManager.getCurrentMode().getDescription();
+        }
+        return "Not connected";
     }
 }
