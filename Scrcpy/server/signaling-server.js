@@ -356,20 +356,49 @@ function startRelayServer() {
 function handleRelayMessage(msg, rinfo) {
     // 消息格式: [类型:1字节][会话ID:16字节][数据:N字节]
     const type = msg[0];
-    const sessionId = msg.slice(1, 17).toString();
-    const data = msg.slice(17);
     
+    if (type === 0x01) {
+        // 注册包: [0x01][设备ID:32字节]
+        const deviceId = msg.slice(1, 33).toString().trim();
+        log('RELAY', `UDP registration from ${rinfo.address}:${rinfo.port} - Device: ${deviceId || 'unknown'}`);
+        
+        // 存储设备地址
+        const sessionId = generateId();
+        relaySessions.set(sessionId, {
+            deviceId: deviceId,
+            clientIp: rinfo.address,
+            clientPort: rinfo.port,
+            deviceIp: rinfo.address,
+            devicePort: rinfo.port,
+            createdAt: Date.now()
+        });
+        
+        // 发送确认
+        const response = Buffer.alloc(17);
+        response[0] = 0x02; // 注册确认
+        response.write(sessionId, 1, 16);
+        udpRelaySocket.send(response, rinfo.port, rinfo.address);
+        log('RELAY', `Registered session: ${sessionId}`);
+        return;
+    }
+    
+    // 转发数据包: [类型:1字节][会话ID:16字节][数据:N字节]
+    const sessionId = msg.slice(1, 17).toString();
     const session = relaySessions.get(sessionId);
     if (!session) {
         log('WARNING', `Unknown relay session: ${sessionId}`);
         return;
     }
     
+    const data = msg.slice(17);
+    
     // 转发给对方
-    if (type === 0x01) { // 设备 -> 客户端
+    if (type === 0x03) { // 设备 -> 客户端
         udpRelaySocket.send(data, session.clientPort, session.clientIp);
-    } else if (type === 0x02) { // 客户端 -> 设备
+        log('RELAY', `Forwarded to client: ${data.length} bytes`);
+    } else if (type === 0x04) { // 客户端 -> 设备
         udpRelaySocket.send(data, session.devicePort, session.deviceIp);
+        log('RELAY', `Forwarded to device: ${data.length} bytes`);
     }
 }
 
