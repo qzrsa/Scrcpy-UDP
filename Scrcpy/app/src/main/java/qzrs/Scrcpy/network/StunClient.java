@@ -217,7 +217,7 @@ public class StunClient {
      */
     public static String getLocalIpAddress() {
         try {
-            java.net.Enumeration<java.net.NetworkInterface> interfaces = 
+            java.util.Enumeration<java.net.NetworkInterface> interfaces = 
                 java.net.NetworkInterface.getNetworkInterfaces();
             
             while (interfaces.hasMoreElements()) {
@@ -226,7 +226,7 @@ public class StunClient {
                 // 跳过loopback和无效接口
                 if (ni.isLoopback() || !ni.isUp()) continue;
                 
-                java.net.Enumeration<java.net.InetAddress> addresses = ni.getInetAddresses();
+                java.util.Enumeration<java.net.InetAddress> addresses = ni.getInetAddresses();
                 while (addresses.hasMoreElements()) {
                     java.net.InetAddress addr = addresses.nextElement();
                     

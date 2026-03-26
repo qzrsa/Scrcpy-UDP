@@ -175,7 +175,7 @@ public class UdpChannelWithAck {
                         }
                     }
                     // DATA类型在这里不处理(由调用方接收)
-                    
+
                 } catch (IOException e) {
                     if (running) {
                         // 忽略超时等非致命错误
@@ -186,7 +186,18 @@ public class UdpChannelWithAck {
         receiverThread.setName("UdpChannelWithAck-Receiver");
         receiverThread.start();
     }
-    
+
+    /**
+     * 读取数据
+     */
+    public ByteBuffer read(int size) throws IOException, InterruptedException {
+        // 简化的read实现，实际应该使用阻塞队列
+        byte[] buffer = new byte[size];
+        DatagramPacket packet = new DatagramPacket(buffer, buffer.length);
+        socket.receive(packet);
+        return ByteBuffer.wrap(packet.getData(), 0, packet.getLength());
+    }
+
     /**
      * 关闭连接
      */
