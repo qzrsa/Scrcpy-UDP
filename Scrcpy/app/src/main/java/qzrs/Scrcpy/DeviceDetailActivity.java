@@ -128,6 +128,15 @@ public class DeviceDetailActivity extends Activity {
         device.customResolutionWidth = Integer.parseInt(width);
         device.customResolutionHeight = Integer.parseInt(height);
       }
+      
+      // 保存设备
+      if (isNew) AppData.dbHelper.insert(device);
+      else AppData.dbHelper.update(device);
+      
+      // 显示保存成功提示
+      String modeText = device.useUdpMode ? "UDP模式" : "TCP模式";
+      Toast.makeText(this, "设备已保存 (" + modeText + ")", Toast.LENGTH_SHORT).show();
+      finish();
       // 更新数据库
       if (isNew) AppData.dbHelper.insert(device);
       else AppData.dbHelper.update(device);
