@@ -36,6 +36,10 @@ public final class Server {
   private static OutputStream videoOutputStream;
   public static DataInputStream mainInputStream;
 
+  // UDP中继发送器
+  public static UdpRelaySender udpRelaySender = null;
+  public static boolean useUdpRelay = false;
+
   private static final Object object = new Object();
 
   private static final int timeoutDelay = 1000 * 20;
@@ -128,6 +132,17 @@ public final class Server {
       // 关闭TCP的Nagle算法，避免小包缓冲
       mainSocket.setTcpNoDelay(true);
     }
+
+    // 尝试连接UDP中继
+    String deviceId = "server-" + android.os.Build.MODEL.replaceAll("[^a-zA-Z0-9]", "");
+    udpRelaySender = new UdpRelaySender();
+    if (udpRelaySender.connect(deviceId)) {
+      useUdpRelay = true;
+      System.out.println("[UDP] UDP中继连接成功，启用UDP视频传输");
+    } else {
+      System.out.println("[UDP] UDP中继连接失败，使用TCP传输");
+      udpRelaySender = null;
+    }
   }
 
   private static void executeVideoOut() {
@@ -212,7 +227,13 @@ public final class Server {
   }
 
   public static void writeVideo(ByteBuffer byteBuffer) throws IOException {
-    videoOutputStream.write(byteBuffer.array());
+    if (useUdpRelay && udpRelaySender != null) {
+      // UDP模式：通过中继发送
+      udpRelaySender.sendVideo(byteBuffer);
+    } else {
+      // TCP模式：直接写入socket
+      videoOutputStream.write(byteBuffer.array());
+    }
   }
 
   public static void errorClose(Exception e) {
