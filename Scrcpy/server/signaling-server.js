@@ -425,59 +425,114 @@ function broadcastDeviceList() {
 }
 
 function generateStatsPage() {
+    const now = Date.now();
     return `
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Scrcpy Signaling Server</title>
+    <title>Scrcpy UDP 信令服务器</title>
+    <meta charset="utf-8">
     <style>
-        body { font-family: Arial, sans-serif; margin: 40px; }
-        h1 { color: #333; }
-        .stats { background: #f5f5f5; padding: 20px; border-radius: 8px; }
-        .stat { margin: 10px 0; }
-        .label { font-weight: bold; }
-        .device-list { margin-top: 20px; }
-        table { width: 100%; border-collapse: collapse; }
-        th, td { padding: 8px; text-align: left; border-bottom: 1px solid #ddd; }
-        th { background: #eee; }
+        body { font-family: Arial, sans-serif; margin: 40px; background: #1a1a2e; color: #eee; }
+        h1 { color: #00d4ff; }
+        h2 { color: #00d4ff; margin-top: 30px; }
+        .stats { display: flex; gap: 20px; flex-wrap: wrap; margin: 20px 0; }
+        .stat-card { background: #16213e; padding: 20px; border-radius: 8px; min-width: 150px; text-align: center; border: 1px solid #0f3460; }
+        .stat-num { font-size: 36px; font-weight: bold; color: #00d4ff; }
+        .stat-label { color: #aaa; margin-top: 5px; }
+        table { width: 100%; border-collapse: collapse; background: #16213e; border-radius: 8px; overflow: hidden; }
+        th { background: #0f3460; padding: 12px; text-align: left; color: #00d4ff; }
+        td { padding: 10px 12px; border-bottom: 1px solid #0f3460; }
+        tr:hover td { background: #0f3460; }
+        .badge { padding: 3px 8px; border-radius: 4px; font-size: 12px; }
+        .badge-green { background: #00b894; color: white; }
+        .badge-blue { background: #0984e3; color: white; }
+        .badge-gray { background: #636e72; color: white; }
+        .refresh { color: #aaa; font-size: 12px; margin-top: 20px; }
     </style>
 </head>
 <body>
-    <h1>Scrcpy UDP 信令服务器</h1>
+    <h1>🖥️ Scrcpy UDP 信令服务器</h1>
+    
     <div class="stats">
-        <div class="stat"><span class="label">在线设备:</span> ${devices.size}</div>
-        <div class="stat"><span class="label">在线客户端:</span> ${clients.size}</div>
-        <div class="stat"><span class="label">活动连接:</span> ${connections.size}</div>
-        <div class="stat"><span class="label">运行时间:</span> ${formatUptime(process.uptime())}</div>
+        <div class="stat-card">
+            <div class="stat-num">${devices.size}</div>
+            <div class="stat-label">在线设备</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-num">${clients.size}</div>
+            <div class="stat-label">WebSocket连接</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-num">${relaySessions.size}</div>
+            <div class="stat-label">UDP中继会话</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-num">${formatUptime(process.uptime())}</div>
+            <div class="stat-label">运行时间</div>
+        </div>
     </div>
-    
-    <div class="device-list">
-        <h2>在线设备</h2>
-        <table>
+
+    <h2>📱 WebSocket 在线设备</h2>
+    <table>
+        <tr>
+            <th>设备ID</th>
+            <th>名称</th>
+            <th>NAT类型</th>
+            <th>注册时间</th>
+        </tr>
+        ${Array.from(devices.values()).map(d => `
             <tr>
-                <th>设备ID</th>
-                <th>名称</th>
-                <th>NAT类型</th>
-                <th>连接时间</th>
+                <td><code>${d.deviceId}</code></td>
+                <td>${d.name}</td>
+                <td><span class="badge badge-blue">${(d.natInfo && d.natInfo.natType) || 'Unknown'}</span></td>
+                <td>${new Date(d.registeredAt).toLocaleString()}</td>
             </tr>
-            ${Array.from(devices.values()).map(d => `
-                <tr>
-                    <td>${d.deviceId}</td>
-                    <td>${d.name}</td>
-                    <td>${(d.natInfo && d.natInfo.natType) || 'Unknown'}</td>
-                    <td>${new Date(d.registeredAt).toLocaleString()}</td>
-                </tr>
-            `).join('')}
-        </table>
-    </div>
-    
-    <script>
-        // 每5秒刷新页面
-        setTimeout(() => location.reload(), 5000);
-    </script>
+        `).join('') || '<tr><td colspan="4" style="color:#aaa;text-align:center">暂无设备</td></tr>'}
+    </table>
+
+    <h2>🔗 UDP 中继会话</h2>
+    <table>
+        <tr>
+            <th>会话ID</th>
+            <th>设备ID</th>
+            <th>IP地址</th>
+            <th>端口</th>
+            <th>创建时间</th>
+        </tr>
+        ${Array.from(relaySessions.entries()).map(([sid, s]) => `
+            <tr>
+                <td><code>${sid}</code></td>
+                <td>${s.deviceId || '-'}</td>
+                <td>${s.clientIp}</td>
+                <td>${s.clientPort}</td>
+                <td>${new Date(s.createdAt).toLocaleString()}</td>
+            </tr>
+        `).join('') || '<tr><td colspan="5" style="color:#aaa;text-align:center">暂无UDP会话</td></tr>'}
+    </table>
+
+    <h2>🌐 WebSocket 连接列表</h2>
+    <table>
+        <tr>
+            <th>连接ID</th>
+            <th>类型</th>
+            <th>设备ID</th>
+            <th>最后心跳</th>
+        </tr>
+        ${Array.from(clients.entries()).map(([cid, c]) => `
+            <tr>
+                <td><code>${cid}</code></td>
+                <td><span class="badge ${c.type === 'device' ? 'badge-green' : c.type === 'client' ? 'badge-blue' : 'badge-gray'}">${c.type || 'unknown'}</span></td>
+                <td>${c.deviceId || '-'}</td>
+                <td>${Math.round((now - c.lastHeartbeat) / 1000)}秒前</td>
+            </tr>
+        `).join('') || '<tr><td colspan="4" style="color:#aaa;text-align:center">暂无连接</td></tr>'}
+    </table>
+
+    <p class="refresh">⏱ 每5秒自动刷新</p>
+    <script>setTimeout(() => location.reload(), 5000);</script>
 </body>
-</html>
-    `;
+</html>`;
 }
 
 function formatUptime(seconds) {
