@@ -64,16 +64,20 @@ public final class Server {
       // 初始化子服务
       boolean canAudio = AudioEncode.init();
       VideoEncode.init();
+      System.out.println("[Server] 初始化完成: canAudio=" + canAudio);
       // 启动
       ArrayList<Thread> threads = new ArrayList<>();
       threads.add(new Thread(Server::executeVideoOut));
+      System.out.println("[Server] 启动视频输出线程");
       if (canAudio) {
         threads.add(new Thread(Server::executeAudioIn));
         threads.add(new Thread(Server::executeAudioOut));
       }
       threads.add(new Thread(Server::executeControlIn));
+      System.out.println("[Server] 启动控制输入线程");
       for (Thread thread : threads) thread.setPriority(Thread.MAX_PRIORITY);
       for (Thread thread : threads) thread.start();
+      System.out.println("[Server] 所有线程已启动");
       // 程序运行
       timeOutThread.interrupt();
       synchronized (object) {
