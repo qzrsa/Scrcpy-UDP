@@ -16,6 +16,7 @@ import qzrs.Scrcpy.client.tools.UdpClientStream;
 import qzrs.Scrcpy.databinding.ItemLoadingBinding;
 import qzrs.Scrcpy.entity.AppData;
 import qzrs.Scrcpy.entity.Device;
+import qzrs.Scrcpy.helper.Logger;
 import qzrs.Scrcpy.helper.PublicTools;
 import qzrs.Scrcpy.helper.ViewTools;
 
@@ -30,35 +31,62 @@ public class Client {
   private Device device;
 
   public Client(Device device) {
-    if (allClient.containsKey(device.uuid)) return;
+    Logger.i("Client", "========== Client 开始初始化 ==========");
+    Logger.i("Client", "设备UUID: " + device.uuid);
+    Logger.i("Client", "设备地址: " + device.address);
+    Logger.i("Client", "服务器端口: " + device.serverPort);
+    Logger.i("Client", "UDP模式: " + device.useUdpMode);
+    
+    if (allClient.containsKey(device.uuid)) {
+      Logger.w("Client", "设备已连接，跳过");
+      return;
+    }
     this.device = device;
     Pair<ItemLoadingBinding, Dialog> loading = ViewTools.createLoading(AppData.mainActivity);
     loading.second.show();
+    Logger.i("Client", "Loading对话框已显示");
     
     // 根据模式选择连接方式
     if (device.useUdpMode) {
       // UDP模式
+      Logger.i("Client", ">>> 使用UDP模式连接");
       PublicTools.logToast("Client", "使用UDP模式连接...", true);
       clientStream = new UdpClientStream(device, bool -> onConnected(bool, loading));
     } else {
       // TCP模式
+      Logger.i("Client", ">>> 使用TCP模式连接");
       clientStream = new ClientStream(device, bool -> onConnected(bool, loading));
     }
   }
   
   private void onConnected(boolean bool, Pair<ItemLoadingBinding, Dialog> loading) {
+    Logger.i("Client", "========== onConnected 回调 ==========");
+    Logger.i("Client", "连接结果: " + (bool ? "成功" : "失败"));
+    
     if (bool) {
       allClient.put(device.uuid, this);
+      Logger.i("Client", "设备已添加到客户端列表");
+      
       // 控制器、播放器
-      clientController = new ClientController(device, clientStream, () -> clientPlayer = new ClientPlayer(device.uuid, clientStream));
+      Logger.i("Client", "创建ClientController...");
+      clientController = new ClientController(device, clientStream, () -> {
+        Logger.i("Client", "创建ClientPlayer...");
+        clientPlayer = new ClientPlayer(device.uuid, clientStream);
+      });
+      
       // 临时设备
       boolean isTempDevice = device.isTempDevice();
       // 启动界面
+      Logger.i("Client", "启动界面...");
       clientController.handleAction(device.changeToFullOnConnect ? "changeToFull" : "changeToSmall", null, 0);
       // 运行启动时操作
       if (device.customResolutionOnConnect) clientController.handleAction("writeByteBuffer", ControlPacket.createChangeResolutionEvent(device.customResolutionWidth, device.customResolutionHeight), 0);
       if (!isTempDevice && device.wakeOnConnect) clientController.handleAction("buttonWake", null, 0);
       if (!isTempDevice && device.lightOffOnConnect) clientController.handleAction("buttonLightOff", null, 2000);
+      
+      Logger.i("Client", "========== 连接流程完成 ==========");
+    } else {
+      Logger.e("Client", "连接失败!");
     }
     if (loading.second.isShowing()) loading.second.cancel();
   }

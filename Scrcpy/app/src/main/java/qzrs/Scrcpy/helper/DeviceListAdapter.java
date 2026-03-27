@@ -74,7 +74,14 @@ public class DeviceListAdapter extends BaseAdapter {
     devicesItemBinding.deviceType.setText(context.getString(device.isNetworkDevice() ? R.string.main_device_type_network : R.string.main_device_type_link));
     devicesItemBinding.deviceName.setText(device.name);
     // 单击事件
-    devicesItemBinding.getRoot().setOnClickListener(v -> Client.startDevice(device));
+    devicesItemBinding.getRoot().setOnClickListener(v -> {
+      Logger.i("DeviceList", "========== 点击设备卡片 ==========");
+      Logger.i("DeviceList", "设备名称: " + device.name);
+      Logger.i("DeviceList", "设备UUID: " + device.uuid);
+      Logger.i("DeviceList", "设备地址: " + device.address);
+      Logger.i("DeviceList", "开始调用 Client.startDevice()");
+      Client.startDevice(device);
+    });
     // 长按事件
     devicesItemBinding.getRoot().setOnLongClickListener(v -> {
       onLongClickCard(device);

@@ -69,13 +69,17 @@ public class LogActivity extends Activity {
         // 日志文本区域
         scrollView = new ScrollView(this);
         logTextView = new TextView(this);
-        logTextView.setTextSize(10);
-        logTextView.setTextColor(Color.BLACK);
-        logTextView.setBackgroundColor(Color.parseColor("#1E1E1E"));
+        logTextView.setTextSize(12);
+        logTextView.setTextColor(Color.parseColor("#00FF00")); // 绿色文字
+        logTextView.setBackgroundColor(Color.parseColor("#1E1E1E")); // 黑色背景
         logTextView.setPadding(10, 10, 10, 10);
+        logTextView.setTypeface(android.graphics.Typeface.MONOSPACE); // 等宽字体
         scrollView.addView(logTextView);
         layout.addView(scrollView, new LinearLayout.LayoutParams(
             LinearLayout.LayoutParams.MATCH_PARENT, 0, 1));
+        
+        // 添加一条测试日志
+        Logger.i("LogActivity", "日志系统初始化完成");
         
         setContentView(layout);
         

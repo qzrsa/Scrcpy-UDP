@@ -13,6 +13,7 @@ import qzrs.Scrcpy.client.decode.DecodecTools;
 import qzrs.Scrcpy.entity.AppData;
 import qzrs.Scrcpy.entity.Device;
 import qzrs.Scrcpy.entity.MyInterface;
+import qzrs.Scrcpy.helper.Logger;
 import qzrs.Scrcpy.helper.PublicTools;
 import qzrs.Scrcpy.network.ConnectionManager;
 import qzrs.Scrcpy.network.StunClient;
