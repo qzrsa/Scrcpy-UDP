@@ -74,33 +74,42 @@ public class UdpRelaySender {
         int offset = data.position();
 
         // 计算分片数
-        int payloadSize = MAX_UDP_PACKET - HEADER_SIZE;
+        int payloadSize = MAX_UDP_PACKET - 20; // 减去包头大小
         int totalFragments = (totalLen + payloadSize - 1) / payloadSize;
 
         for (int i = 0; i < totalFragments; i++) {
             int fragOffset = offset + i * payloadSize;
             int fragLen = Math.min(payloadSize, totalLen - i * payloadSize);
 
-            // 包格式: [seq:4][totalLen:4][fragIndex:2][totalFrags:2][data:N]
-            byte[] packet = new byte[12 + fragLen];
-            // 序号
-            packet[0] = (byte)(packetSeq >> 24);
-            packet[1] = (byte)(packetSeq >> 16);
-            packet[2] = (byte)(packetSeq >> 8);
-            packet[3] = (byte)(packetSeq);
-            // 总长度
-            packet[4] = (byte)(totalLen >> 24);
-            packet[5] = (byte)(totalLen >> 16);
-            packet[6] = (byte)(totalLen >> 8);
-            packet[7] = (byte)(totalLen);
-            // 分片索引
-            packet[8] = (byte)(i >> 8);
-            packet[9] = (byte)(i);
-            // 总分片数
-            packet[10] = (byte)(totalFragments >> 8);
-            packet[11] = (byte)(totalFragments);
+            // 包格式: [类型:1][会话ID:16][seq:4][fragIndex:2][totalFrags:2][data:N]
+            byte[] packet = new byte[1 + 16 + 4 + 2 + 2 + fragLen];
+            int pos = 0;
+            
+            // 类型: 0x03 (设备->客户端)
+            packet[pos++] = 0x03;
+            
+            // 会话ID (16字节)
+            byte[] sessionIdBytes = sessionId.getBytes();
+            int copyLen = Math.min(sessionIdBytes.length, 16);
+            System.arraycopy(sessionIdBytes, 0, packet, pos, copyLen);
+            pos += 16;
+            
+            // 序号 (4字节)
+            packet[pos++] = (byte)(packetSeq >> 24);
+            packet[pos++] = (byte)(packetSeq >> 16);
+            packet[pos++] = (byte)(packetSeq >> 8);
+            packet[pos++] = (byte)(packetSeq);
+            
+            // 分片索引 (2字节)
+            packet[pos++] = (byte)(i >> 8);
+            packet[pos++] = (byte)(i);
+            
+            // 总分片数 (2字节)
+            packet[pos++] = (byte)(totalFragments >> 8);
+            packet[pos++] = (byte)(totalFragments);
+            
             // 数据
-            System.arraycopy(bytes, fragOffset, packet, 12, fragLen);
+            System.arraycopy(bytes, fragOffset, packet, pos, fragLen);
 
             DatagramPacket udpPkt = new DatagramPacket(packet, packet.length, relayAddress, RELAY_PORT);
             socket.send(udpPkt);
