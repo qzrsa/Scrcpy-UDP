@@ -25,6 +25,7 @@ import qzrs.Scrcpy.databinding.ItemLoadingBinding;
 import qzrs.Scrcpy.databinding.ItemSetDeviceBinding;
 import qzrs.Scrcpy.entity.AppData;
 import qzrs.Scrcpy.entity.Device;
+import qzrs.Scrcpy.helper.Logger;
 
 public class DeviceListAdapter extends BaseAdapter {
 
