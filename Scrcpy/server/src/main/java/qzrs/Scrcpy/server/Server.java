@@ -45,6 +45,7 @@ public final class Server {
   private static final int timeoutDelay = 1000 * 20;
 
   public static void main(String... args) {
+    System.out.println("[Server] ========== Server启动 ==========");
     try {
       Thread timeOutThread = new Thread(() -> {
         try {
@@ -55,12 +56,17 @@ public final class Server {
       });
       timeOutThread.start();
       // 解析参数
+      System.out.println("[Server] 解析参数...");
       Options.parse(args);
       // 初始化
+      System.out.println("[Server] 初始化管理器...");
       setManagers();
+      System.out.println("[Server] 初始化设备...");
       Device.init();
       // 连接
+      System.out.println("[Server] 连接客户端...");
       connectClient();
+      System.out.println("[Server] 客户端已连接");
       // 初始化子服务
       boolean canAudio = AudioEncode.init();
       VideoEncode.init();
@@ -86,6 +92,7 @@ public final class Server {
       // 终止子服务
       for (Thread thread : threads) thread.interrupt();
     } catch (Exception e) {
+      System.out.println("[Server] 异常: " + e.getMessage());
       e.printStackTrace();
     } finally {
       // 释放资源
