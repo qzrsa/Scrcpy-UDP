@@ -114,37 +114,26 @@ public class UdpClientStream extends ClientStream {
             adb.pushFile(AppData.applicationContext.getResources().openRawResource(R.raw.scrcpy_server), serverName, null);
         }
         
-        // 构建启动脚本
-        StringBuilder script = new StringBuilder();
-        script.append("#!/system/bin/sh\n");
-        script.append("app_process -Djava.class.path=").append(serverName).append(" / qzrs.Scrcpy.server.Server");
-        script.append(" serverPort=").append(device.serverPort);
-        script.append(" listenClip=").append(device.listenClip ? 1 : 0);
-        script.append(" isAudio=").append(device.isAudio ? 1 : 0);
-        script.append(" maxSize=").append(device.maxSize);
-        script.append(" maxFps=").append(device.maxFps);
-        script.append(" maxVideoBit=").append(device.maxVideoBit);
-        script.append(" keepAwake=").append(device.keepWakeOnRunning ? 1 : 0);
-        script.append(" supportH265=").append((device.useH265 && supportH265) ? 1 : 0);
-        script.append(" supportOpus=").append(supportOpus ? 1 : 0);
-        script.append(" startApp=").append(device.startApp);
-        script.append("\n");
-        
-        // 写入脚本文件
-        String scriptPath = "/data/local/tmp/start_scrcpy.sh";
-        adb.runAdbCmd("rm " + scriptPath);
-        
-        // 通过echo写入脚本（避免长命令问题）
         shell = adb.getShell();
-        shell.write(ByteBuffer.wrap(("cat > " + scriptPath + " << 'EOF'\n").getBytes()));
-        Thread.sleep(100);
-        shell.write(ByteBuffer.wrap(script.toString().getBytes()));
-        Thread.sleep(100);
-        shell.write(ByteBuffer.wrap("EOF\n".getBytes()));
-        Thread.sleep(100);
         
-        // 执行脚本
-        shell.write(ByteBuffer.wrap(("sh " + scriptPath + "\n").getBytes()));
+        // 使用dalvikvm直接执行Java程序
+        StringBuilder cmd = new StringBuilder();
+        cmd.append("CLASSPATH=").append(serverName).append(" ");
+        cmd.append("exec app_process / qzrs.Scrcpy.server.Server");
+        cmd.append(" serverPort=").append(device.serverPort);
+        cmd.append(" listenClip=").append(device.listenClip ? 1 : 0);
+        cmd.append(" isAudio=").append(device.isAudio ? 1 : 0);
+        cmd.append(" maxSize=").append(device.maxSize);
+        cmd.append(" maxFps=").append(device.maxFps);
+        cmd.append(" maxVideoBit=").append(device.maxVideoBit);
+        cmd.append(" keepAwake=").append(device.keepWakeOnRunning ? 1 : 0);
+        cmd.append(" supportH265=").append((device.useH265 && supportH265) ? 1 : 0);
+        cmd.append(" supportOpus=").append(supportOpus ? 1 : 0);
+        cmd.append(" startApp=").append(device.startApp);
+        cmd.append("\n");
+        
+        Logger.i("UdpClientStream", "启动命令: " + cmd.toString());
+        shell.write(ByteBuffer.wrap(cmd.toString().getBytes()));
         Thread.sleep(500);
     }
 
