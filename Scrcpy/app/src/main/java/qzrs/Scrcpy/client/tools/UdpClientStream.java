@@ -70,11 +70,15 @@ public class UdpClientStream extends ClientStream {
     
     public UdpClientStream(Device device, MyInterface.MyFunctionBoolean handle) {
         super(); // 调用空构造函数
+        Logger.i("UdpClientStream", "========== UdpClientStream 初始化 ==========");
+        Logger.i("UdpClientStream", "设备UUID: " + device.uuid);
+        Logger.i("UdpClientStream", "设备地址: " + device.address);
         
         // 创建超时线程
         Thread timeOutThread = new Thread(() -> {
             try {
                 Thread.sleep(timeoutDelay);
+                Logger.e("UdpClientStream", "连接超时!");
                 PublicTools.logToast("UDP", "连接超时", true);
                 handle.run(false);
             } catch (InterruptedException ignored) {}
@@ -84,19 +88,26 @@ public class UdpClientStream extends ClientStream {
         // 创建连接线程
         Thread connectThread = new Thread(() -> {
             try {
-                // 1. 通过ADB连接设备并启动服务器
+                Logger.i("UdpClientStream", ">>> 步骤1: ADB连接");
                 adb = AdbTools.connectADB(device);
-                startServer(device);
+                Logger.i("UdpClientStream", "ADB连接成功");
                 
-                // 2. 建立UDP连接
+                Logger.i("UdpClientStream", ">>> 步骤2: 启动服务器");
+                startServer(device);
+                Logger.i("UdpClientStream", "服务器启动成功");
+                
+                Logger.i("UdpClientStream", ">>> 步骤3: 建立UDP连接");
                 if (connectUdp(device)) {
                     isConnected = true;
+                    Logger.i("UdpClientStream", "========== UDP连接成功 ==========");
                     handle.run(true);
                 } else {
+                    Logger.e("UdpClientStream", "UDP连接失败");
                     PublicTools.logToast("UDP", "UDP连接失败", true);
                     handle.run(false);
                 }
             } catch (Exception e) {
+                Logger.e("UdpClientStream", "连接异常: " + e.getMessage(), e);
                 PublicTools.logToast("UDP", "错误: " + e.getMessage(), true);
                 handle.run(false);
             } finally {
@@ -104,6 +115,7 @@ public class UdpClientStream extends ClientStream {
             }
         });
         connectThread.start();
+        Logger.i("UdpClientStream", "连接线程已启动");
     }
     
     /**
@@ -138,14 +150,20 @@ public class UdpClientStream extends ClientStream {
      * 建立UDP连接
      */
     private boolean connectUdp(Device device) {
+        Logger.i("UdpClientStream", ">>> connectUdp 开始");
         try {
             PublicTools.logToast("UDP", "正在建立UDP连接...", true);
+            Logger.i("UdpClientStream", "正在建立UDP连接...");
             
             // 1. 查询本地NAT信息
+            Logger.i("UdpClientStream", "查询NAT信息...");
             StunClient stun = new StunClient();
             StunClient.NatInfo natInfo = stun.queryPublicAddress();
             if (natInfo.success) {
+                Logger.i("UdpClientStream", "NAT: " + natInfo.publicIp + ":" + natInfo.publicPort);
                 PublicTools.logToast("UDP", "NAT: " + natInfo.publicIp + ":" + natInfo.publicPort, true);
+            } else {
+                Logger.w("UdpClientStream", "NAT查询失败");
             }
             
             // 2. 获取服务器地址
@@ -159,21 +177,27 @@ public class UdpClientStream extends ClientStream {
                 serverPort = device.signalingPort;
             }
             
+            Logger.i("UdpClientStream", "信令服务器: " + serverAddr + ":" + serverPort);
+            
             // 3. 创建连接管理器
+            Logger.i("UdpClientStream", "创建ConnectionManager...");
             connectionManager = new ConnectionManager(serverAddr, serverPort);
             connectionManager.setListener(new ConnectionManager.ConnectionListener() {
                 @Override
                 public void onConnected(ConnectionManager.ConnectionMode mode) {
+                    Logger.i("UdpClientStream", "连接成功! 模式: " + mode.getDescription());
                     PublicTools.logToast("UDP", "连接模式: " + mode.getDescription(), true);
                 }
                 
                 @Override
                 public void onConnectFailed(String reason) {
+                    Logger.e("UdpClientStream", "连接失败: " + reason);
                     PublicTools.logToast("UDP", "连接失败: " + reason, true);
                 }
                 
                 @Override
                 public void onDisconnected() {
+                    Logger.w("UdpClientStream", "连接断开");
                     PublicTools.logToast("UDP", "连接断开", true);
                 }
             });
