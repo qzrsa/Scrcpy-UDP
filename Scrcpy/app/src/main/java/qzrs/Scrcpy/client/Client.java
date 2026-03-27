@@ -1,6 +1,10 @@
 package qzrs.Scrcpy.client;
 
 import android.app.Dialog;
+import android.content.Intent;
+import android.net.Uri;
+import android.os.Build;
+import android.provider.Settings;
 import android.util.Pair;
 
 import java.nio.ByteBuffer;
@@ -37,24 +41,29 @@ public class Client {
     Logger.i("Client", "服务器端口: " + device.serverPort);
     Logger.i("Client", "UDP模式: " + device.useUdpMode);
     
+    PublicTools.logToast("Client", "开始连接: " + device.address, true);
+    
     if (allClient.containsKey(device.uuid)) {
       Logger.w("Client", "设备已连接，跳过");
+      PublicTools.logToast("Client", "设备已连接", true);
       return;
     }
     this.device = device;
     Pair<ItemLoadingBinding, Dialog> loading = ViewTools.createLoading(AppData.mainActivity);
     loading.second.show();
     Logger.i("Client", "Loading对话框已显示");
+    PublicTools.logToast("Client", "Loading显示中...", true);
     
     // 根据模式选择连接方式
     if (device.useUdpMode) {
       // UDP模式
       Logger.i("Client", ">>> 使用UDP模式连接");
-      PublicTools.logToast("Client", "使用UDP模式连接...", true);
+      PublicTools.logToast("Client", "UDP模式", true);
       clientStream = new UdpClientStream(device, bool -> onConnected(bool, loading));
     } else {
       // TCP模式
       Logger.i("Client", ">>> 使用TCP模式连接");
+      PublicTools.logToast("Client", "TCP模式", true);
       clientStream = new ClientStream(device, bool -> onConnected(bool, loading));
     }
   }
@@ -93,6 +102,16 @@ public class Client {
 
   public static void startDevice(Device device) {
     if (device == null) return;
+    // 检查悬浮窗权限
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && !Settings.canDrawOverlays(AppData.applicationContext)) {
+      PublicTools.logToast("Client", "请先开启悬浮窗权限！", true);
+      // 跳转到悬浮窗权限设置页面
+      Intent intent = new Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+          Uri.parse("package:" + AppData.applicationContext.getPackageName()));
+      intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+      AppData.applicationContext.startActivity(intent);
+      return;
+    }
     new Client(device);
   }
 

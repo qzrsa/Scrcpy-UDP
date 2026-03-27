@@ -76,6 +76,7 @@ public class DeviceListAdapter extends BaseAdapter {
     devicesItemBinding.deviceName.setText(device.name);
     // 单击事件
     devicesItemBinding.getRoot().setOnClickListener(v -> {
+      android.widget.Toast.makeText(context, "点击了设备: " + device.name, android.widget.Toast.LENGTH_SHORT).show();
       Logger.i("DeviceList", "========== 点击设备卡片 ==========");
       Logger.i("DeviceList", "设备名称: " + device.name);
       Logger.i("DeviceList", "设备UUID: " + device.uuid);

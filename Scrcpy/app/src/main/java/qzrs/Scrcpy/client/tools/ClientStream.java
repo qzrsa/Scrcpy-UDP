@@ -55,6 +55,8 @@ public class ClientStream {
     Logger.i("ClientStream", "========== 开始连接 ==========");
     Logger.logConnection("设备信息", "uuid=" + device.uuid + ", address=" + device.address + ", serverPort=" + device.serverPort + ", useUdpMode=" + device.useUdpMode);
     
+    PublicTools.logToast("ClientStream", "构造函数开始", true);
+    
     Thread timeOutThread = new Thread(() -> {
       try {
         Thread.sleep(timeoutDelay);
@@ -68,22 +70,28 @@ public class ClientStream {
     connectThread = new Thread(() -> {
       try {
         Logger.logConnection("ADB连接", "正在连接ADB...");
+        PublicTools.logToast("ClientStream", "正在连接ADB...", true);
         adb = AdbTools.connectADB(device);
         Logger.logConnection("ADB连接", "ADB连接成功");
+        PublicTools.logToast("ClientStream", "ADB连接成功", true);
         
         Logger.logConnection("启动服务器", "正在启动Scrcpy服务器...");
+        PublicTools.logToast("ClientStream", "启动服务器...", true);
         startServer(device);
         Logger.logConnection("启动服务器", "服务器启动完成");
+        PublicTools.logToast("ClientStream", "服务器启动完成", true);
         
         Logger.logConnection("建立连接", "正在建立视频连接...");
+        PublicTools.logToast("ClientStream", "建立视频连接...", true);
         connectServer(device);
         Logger.logConnection("建立连接", "视频连接成功!");
+        PublicTools.logToast("ClientStream", "视频连接成功!", true);
         
         Logger.i("ClientStream", "========== 连接成功 ==========");
         handle.run(true);
       } catch (Exception e) {
         Logger.e("ClientStream", "连接失败: " + e.getMessage(), e);
-        PublicTools.logToast("stream", e.toString(), true);
+        PublicTools.logToast("ClientStream", "连接失败: " + e.getMessage(), true);
         handle.run(false);
       } finally {
         timeOutThread.interrupt();
