@@ -228,19 +228,16 @@ public final class Server {
   }
 
   public static void writeVideo(ByteBuffer byteBuffer) throws IOException {
+    // 始终向TCP写入视频数据（作为主通道或备用通道）
+    videoOutputStream.write(byteBuffer.array());
+    
+    // 如果UDP可用，也向UDP发送（低延迟）
     if (useUdpRelay && udpRelaySender != null && udpRelaySender.isConnected()) {
-      // UDP模式：通过中继发送
       try {
         udpRelaySender.sendVideo(byteBuffer);
-        System.out.println("[UDP] 视频数据已发送: " + byteBuffer.remaining() + " bytes");
       } catch (Exception e) {
-        System.out.println("[UDP] 发送失败，降级到TCP: " + e.getMessage());
-        videoOutputStream.write(byteBuffer.array());
+        System.out.println("[UDP] 发送失败: " + e.getMessage());
       }
-    } else {
-      // TCP模式：直接写入socket
-      System.out.println("[TCP] 视频数据已发送: " + byteBuffer.remaining() + " bytes (UDP=" + useUdpRelay + ")");
-      videoOutputStream.write(byteBuffer.array());
     }
   }
 
