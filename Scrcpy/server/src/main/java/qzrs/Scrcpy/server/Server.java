@@ -6,6 +6,7 @@ package qzrs.Scrcpy.server;
 import android.annotation.SuppressLint;
 import android.os.IBinder;
 import android.os.IInterface;
+import android.util.Log;
 
 import java.io.DataInputStream;
 import java.io.IOException;
@@ -30,6 +31,7 @@ import qzrs.Scrcpy.server.wrappers.WindowManager;
 
 // 此部分代码摘抄借鉴了著名投屏软件Scrcpy的开源代码(https://github.com/Genymobile/scrcpy/tree/master/server)
 public final class Server {
+  private static final String TAG = "Easycontrol_server";
   private static Socket mainSocket;
   private static Socket videoSocket;
   private static OutputStream mainOutputStream;
@@ -45,7 +47,7 @@ public final class Server {
   private static final int timeoutDelay = 1000 * 20;
 
   public static void main(String... args) {
-    System.out.println("[Server] ========== Server启动 ==========");
+    Log.e(TAG, "[Server] ========== Server启动 ==========");
     try {
       Thread timeOutThread = new Thread(() -> {
         try {
@@ -56,34 +58,34 @@ public final class Server {
       });
       timeOutThread.start();
       // 解析参数
-      System.out.println("[Server] 解析参数...");
+      Log.e(TAG, "[Server] 解析参数...");
       Options.parse(args);
       // 初始化
-      System.out.println("[Server] 初始化管理器...");
+      Log.e(TAG, "[Server] 初始化管理器...");
       setManagers();
-      System.out.println("[Server] 初始化设备...");
+      Log.e(TAG, "[Server] 初始化设备...");
       Device.init();
       // 连接
-      System.out.println("[Server] 连接客户端...");
+      Log.e(TAG, "[Server] 连接客户端...");
       connectClient();
-      System.out.println("[Server] 客户端已连接");
+      Log.e(TAG, "[Server] 客户端已连接");
       // 初始化子服务
       boolean canAudio = AudioEncode.init();
       VideoEncode.init();
-      System.out.println("[Server] 初始化完成: canAudio=" + canAudio);
+      Log.e(TAG, "[Server] 初始化完成: canAudio=" + canAudio);
       // 启动
       ArrayList<Thread> threads = new ArrayList<>();
       threads.add(new Thread(Server::executeVideoOut));
-      System.out.println("[Server] 启动视频输出线程");
+      Log.e(TAG, "[Server] 启动视频输出线程");
       if (canAudio) {
         threads.add(new Thread(Server::executeAudioIn));
         threads.add(new Thread(Server::executeAudioOut));
       }
       threads.add(new Thread(Server::executeControlIn));
-      System.out.println("[Server] 启动控制输入线程");
+      Log.e(TAG, "[Server] 启动控制输入线程");
       for (Thread thread : threads) thread.setPriority(Thread.MAX_PRIORITY);
       for (Thread thread : threads) thread.start();
-      System.out.println("[Server] 所有线程已启动");
+      Log.e(TAG, "[Server] 所有线程已启动");
       // 程序运行
       timeOutThread.interrupt();
       synchronized (object) {
@@ -92,7 +94,7 @@ public final class Server {
       // 终止子服务
       for (Thread thread : threads) thread.interrupt();
     } catch (Exception e) {
-      System.out.println("[Server] 异常: " + e.getMessage());
+      Log.e(TAG, "[Server] 异常: " + e.getMessage());
       e.printStackTrace();
     } finally {
       // 释放资源
@@ -137,13 +139,13 @@ public final class Server {
     ServerSocket serverSocket = new ServerSocket(Options.serverPort);
     serverSocket.setSoTimeout(10000); // 10秒超时
     try {
-      System.out.println("[Server] 等待第一个连接（主控制通道）...");
+      Log.e(TAG, "[Server] 等待第一个连接（主控制通道）...");
       mainSocket = serverSocket.accept();
-      System.out.println("[Server] 主控制通道已连接");
+      Log.e(TAG, "[Server] 主控制通道已连接");
       
-      System.out.println("[Server] 等待第二个连接（视频通道）...");
+      Log.e(TAG, "[Server] 等待第二个连接（视频通道）...");
       videoSocket = serverSocket.accept();
-      System.out.println("[Server] 视频通道已连接");
+      Log.e(TAG, "[Server] 视频通道已连接");
       
       mainOutputStream = mainSocket.getOutputStream();
       videoOutputStream = videoSocket.getOutputStream();
@@ -159,9 +161,9 @@ public final class Server {
     udpRelaySender = new UdpRelaySender();
     if (udpRelaySender.connect(deviceId)) {
       useUdpRelay = true;
-      System.out.println("[UDP] UDP中继连接成功，启用UDP视频传输");
+      Log.e(TAG, "[UDP] UDP中继连接成功，启用UDP视频传输");
     } else {
-      System.out.println("[UDP] UDP中继连接失败，使用TCP传输");
+      Log.e(TAG, "[UDP] UDP中继连接失败，使用TCP传输");
       useUdpRelay = false;
       udpRelaySender = null;
     }
