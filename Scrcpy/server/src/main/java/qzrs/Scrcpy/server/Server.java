@@ -128,9 +128,16 @@ public final class Server {
 
   private static void connectClient() throws IOException {
     ServerSocket serverSocket = new ServerSocket(Options.serverPort);
+    serverSocket.setSoTimeout(10000); // 10秒超时
     try {
+      System.out.println("[Server] 等待第一个连接（主控制通道）...");
       mainSocket = serverSocket.accept();
+      System.out.println("[Server] 主控制通道已连接");
+      
+      System.out.println("[Server] 等待第二个连接（视频通道）...");
       videoSocket = serverSocket.accept();
+      System.out.println("[Server] 视频通道已连接");
+      
       mainOutputStream = mainSocket.getOutputStream();
       videoOutputStream = videoSocket.getOutputStream();
       mainInputStream = new DataInputStream(mainSocket.getInputStream());
