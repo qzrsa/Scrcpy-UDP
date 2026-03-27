@@ -116,24 +116,37 @@ public class UdpClientStream extends ClientStream {
         
         shell = adb.getShell();
         
-        // 使用dalvikvm直接执行Java程序
-        StringBuilder cmd = new StringBuilder();
-        cmd.append("CLASSPATH=").append(serverName).append(" ");
-        cmd.append("exec app_process / qzrs.Scrcpy.server.Server");
-        cmd.append(" serverPort=").append(device.serverPort);
-        cmd.append(" listenClip=").append(device.listenClip ? 1 : 0);
-        cmd.append(" isAudio=").append(device.isAudio ? 1 : 0);
-        cmd.append(" maxSize=").append(device.maxSize);
-        cmd.append(" maxFps=").append(device.maxFps);
-        cmd.append(" maxVideoBit=").append(device.maxVideoBit);
-        cmd.append(" keepAwake=").append(device.keepWakeOnRunning ? 1 : 0);
-        cmd.append(" supportH265=").append((device.useH265 && supportH265) ? 1 : 0);
-        cmd.append(" supportOpus=").append(supportOpus ? 1 : 0);
-        cmd.append(" startApp=").append(device.startApp);
-        cmd.append("\n");
+        // 分多次写入，避免缓冲区溢出
+        shell.write(ByteBuffer.wrap("export CLASSPATH=".getBytes()));
+        Thread.sleep(50);
+        shell.write(ByteBuffer.wrap(serverName.getBytes()));
+        Thread.sleep(50);
+        shell.write(ByteBuffer.wrap("\n".getBytes()));
+        Thread.sleep(50);
         
-        Logger.i("UdpClientStream", "启动命令: " + cmd.toString());
-        shell.write(ByteBuffer.wrap(cmd.toString().getBytes()));
+        shell.write(ByteBuffer.wrap("exec app_process / qzrs.Scrcpy.server.Server".getBytes()));
+        Thread.sleep(50);
+        shell.write(ByteBuffer.wrap((" serverPort=" + device.serverPort).getBytes()));
+        Thread.sleep(50);
+        shell.write(ByteBuffer.wrap((" listenClip=" + (device.listenClip ? 1 : 0)).getBytes()));
+        Thread.sleep(50);
+        shell.write(ByteBuffer.wrap((" isAudio=" + (device.isAudio ? 1 : 0)).getBytes()));
+        Thread.sleep(50);
+        shell.write(ByteBuffer.wrap((" maxSize=" + device.maxSize).getBytes()));
+        Thread.sleep(50);
+        shell.write(ByteBuffer.wrap((" maxFps=" + device.maxFps).getBytes()));
+        Thread.sleep(50);
+        shell.write(ByteBuffer.wrap((" maxVideoBit=" + device.maxVideoBit).getBytes()));
+        Thread.sleep(50);
+        shell.write(ByteBuffer.wrap((" keepAwake=" + (device.keepWakeOnRunning ? 1 : 0)).getBytes()));
+        Thread.sleep(50);
+        shell.write(ByteBuffer.wrap((" supportH265=" + ((device.useH265 && supportH265) ? 1 : 0)).getBytes()));
+        Thread.sleep(50);
+        shell.write(ByteBuffer.wrap((" supportOpus=" + (supportOpus ? 1 : 0)).getBytes()));
+        Thread.sleep(50);
+        shell.write(ByteBuffer.wrap((" startApp=" + device.startApp).getBytes()));
+        Thread.sleep(50);
+        shell.write(ByteBuffer.wrap("\n".getBytes()));
         Thread.sleep(500);
     }
 
