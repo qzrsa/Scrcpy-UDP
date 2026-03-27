@@ -141,6 +141,7 @@ public final class Server {
       System.out.println("[UDP] UDP中继连接成功，启用UDP视频传输");
     } else {
       System.out.println("[UDP] UDP中继连接失败，使用TCP传输");
+      useUdpRelay = false;
       udpRelaySender = null;
     }
   }
