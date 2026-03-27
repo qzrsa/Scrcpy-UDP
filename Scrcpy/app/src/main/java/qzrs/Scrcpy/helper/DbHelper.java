@@ -14,7 +14,7 @@ import qzrs.Scrcpy.entity.Device;
 public class DbHelper extends SQLiteOpenHelper {
 
   private static final String dataBaseName = "app.db";
-  private static final int version = 23;
+  private static final int version = 24;
   private final String tableName = "DevicesDb";
 
   public DbHelper(Context context) {
@@ -60,7 +60,8 @@ public class DbHelper extends SQLiteOpenHelper {
     stringBuilder.append("smallXLan integer,");
     stringBuilder.append("smallYLan integer,");
     stringBuilder.append("smallLengthLan integer,");
-    stringBuilder.append("miniY integer);");
+    stringBuilder.append("miniY integer,");
+    stringBuilder.append("useUdpMode integer);");
     db.execSQL(stringBuilder.toString());
   }
 
@@ -158,6 +159,7 @@ public class DbHelper extends SQLiteOpenHelper {
     values.put("smallYLan", device.smallYLan);
     values.put("smallLengthLan", device.smallLengthLan);
     values.put("miniY", device.miniY);
+    values.put("useUdpMode", device.useUdpMode ? 1 : 0);
     return values;
   }
 
@@ -300,6 +302,10 @@ public class DbHelper extends SQLiteOpenHelper {
         }
         case "miniY": {
           device.miniY = cursor.getInt(i);
+          break;
+        }
+        case "useUdpMode": {
+          device.useUdpMode = cursor.getInt(i) == 1;
           break;
         }
       }

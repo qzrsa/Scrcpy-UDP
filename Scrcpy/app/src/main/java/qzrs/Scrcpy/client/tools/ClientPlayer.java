@@ -11,6 +11,7 @@ import java.nio.ByteBuffer;
 import qzrs.Scrcpy.client.Client;
 import qzrs.Scrcpy.client.decode.AudioDecode;
 import qzrs.Scrcpy.client.decode.VideoDecode;
+import qzrs.Scrcpy.helper.Logger;
 import qzrs.Scrcpy.helper.PublicTools;
 
 public class ClientPlayer {
@@ -78,20 +79,40 @@ public class ClientPlayer {
   private void videoStreamIn() {
     VideoDecode videoDecode = null;
     try {
+      Logger.i("ClientPlayer", ">>> 视频流线程启动");
       boolean useH265 = clientStream.readByteFromVideo() == 1;
+      Logger.i("ClientPlayer", ">>> 读取编码格式: " + (useH265 ? "H265" : "H264"));
+      
       Pair<Integer, Integer> videoSize = new Pair<>(clientStream.readIntFromVideo(), clientStream.readIntFromVideo());
+      Logger.i("ClientPlayer", ">>> 视频分辨率: " + videoSize.first + "x" + videoSize.second);
+      
       Surface surface = new Surface(clientController.getTextureView().getSurfaceTexture());
+      Logger.i("ClientPlayer", ">>> Surface已获取");
+      
       ByteBuffer csd0 = clientStream.readFrameFromVideo();
+      Logger.i("ClientPlayer", ">>> CSD0已读取: " + csd0.remaining() + " bytes");
+      
       ByteBuffer csd1 = useH265 ? null : clientStream.readFrameFromVideo();
+      if (csd1 != null) Logger.i("ClientPlayer", ">>> CSD1已读取: " + csd1.remaining() + " bytes");
+      
       videoDecode = new VideoDecode(videoSize, surface, csd0, csd1, playHandler);
+      Logger.i("ClientPlayer", ">>> VideoDecode已创建");
+      
+      int frameCount = 0;
       while (!Thread.interrupted()) {
         ByteBuffer frame = clientStream.readFrameFromVideo();
         if (statsOverlay != null) statsOverlay.onVideoFrame(frame.remaining());
         videoDecode.decodeIn(frame);
+        frameCount++;
+        if (frameCount % 30 == 0) {
+          Logger.d("ClientPlayer", ">>> 已解码 " + frameCount + " 帧");
+        }
       }
-    } catch (Exception ignored) {
+    } catch (Exception e) {
+      Logger.e("ClientPlayer", ">>> 视频流异常: " + e.getMessage(), e);
     } finally {
       if (videoDecode != null) videoDecode.release();
+      Logger.i("ClientPlayer", ">>> 视频流线程结束");
     }
   }
 
