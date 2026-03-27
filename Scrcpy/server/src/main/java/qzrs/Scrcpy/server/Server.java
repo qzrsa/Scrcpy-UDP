@@ -123,7 +123,8 @@ public final class Server {
   }
 
   private static void connectClient() throws IOException {
-    try (ServerSocket serverSocket = new ServerSocket(Options.serverPort)) {
+    ServerSocket serverSocket = new ServerSocket(Options.serverPort);
+    try {
       mainSocket = serverSocket.accept();
       videoSocket = serverSocket.accept();
       mainOutputStream = mainSocket.getOutputStream();
@@ -131,6 +132,8 @@ public final class Server {
       mainInputStream = new DataInputStream(mainSocket.getInputStream());
       // 关闭TCP的Nagle算法，避免小包缓冲
       mainSocket.setTcpNoDelay(true);
+    } finally {
+      serverSocket.close();
     }
 
     // 尝试连接UDP中继
