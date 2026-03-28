@@ -1,0 +1,2 @@
+# Force case-sensitive file names
+app/src/main/res/raw/* text eol=lf
