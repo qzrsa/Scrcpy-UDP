@@ -103,7 +103,7 @@ public class UdpClientStream extends ClientStream {
     }
 
     /**
-     * 启动Scrcpy服务器 - 使用分块写入避免shell缓冲区溢出
+     * 启动Scrcpy服务器 - 使用adb命令启动，避免shell缓冲区问题
      */
     private void startScrcpyServer(Device device) throws Exception {
         if (BuildConfig.ENABLE_DEBUG_FEATURE || !adb.runAdbCmd("ls /data/local/tmp/scrcpy_*").contains(serverName)) {
@@ -111,32 +111,29 @@ public class UdpClientStream extends ClientStream {
             adb.pushFile(AppData.applicationContext.getResources().openRawResource(R.raw.scrcpy_server), serverName, null);
         }
         
+        // 使用单独的adb命令启动服务器，而不是shell
+        // 这样可以避免shell缓冲区残留问题
+        String cmd = "app_process -Djava.class.path=" + serverName + 
+            " / qzrs.Scrcpy.server.Server" +
+            " serverPort=" + device.serverPort +
+            " listenClip=" + (device.listenClip ? 1 : 0) +
+            " isAudio=" + (device.isAudio ? 1 : 0) +
+            " maxSize=" + device.maxSize +
+            " maxFps=" + device.maxFps +
+            " maxVideoBit=" + device.maxVideoBit +
+            " keepAwake=" + (device.keepWakeOnRunning ? 1 : 0) +
+            " supportH265=" + ((device.useH265 && supportH265) ? 1 : 0) +
+            " supportOpus=" + (supportOpus ? 1 : 0) +
+            " startApp=" + device.startApp;
+        
+        // 用runAdbCmd启动服务器（后台运行）
+        adb.runAdbCmd(cmd + " &");
+        
+        // 等待服务器启动
+        Thread.sleep(300);
+        
+        // 获取shell用于后续通信
         shell = adb.getShell();
-        
-        // 清空shell缓冲区
-        shell.write(ByteBuffer.wrap("\n".getBytes()));
-        Thread.sleep(100);
-        
-        // 分块写入命令，避免shell缓冲区溢出
-        String[] cmdParts = {
-            "app_process -Djava.class.path=" + serverName,
-            " / qzrs.Scrcpy.server.Server",
-            " serverPort=" + device.serverPort,
-            " listenClip=" + (device.listenClip ? 1 : 0),
-            " isAudio=" + (device.isAudio ? 1 : 0),
-            " maxSize=" + device.maxSize,
-            " maxFps=" + device.maxFps,
-            " maxVideoBit=" + device.maxVideoBit,
-            " keepAwake=" + (device.keepWakeOnRunning ? 1 : 0),
-            " supportH265=" + ((device.useH265 && supportH265) ? 1 : 0),
-            " supportOpus=" + (supportOpus ? 1 : 0),
-            " startApp=" + device.startApp + "\n"
-        };
-        
-        for (String part : cmdParts) {
-            shell.write(ByteBuffer.wrap(part.getBytes()));
-            Thread.sleep(20); // 每块之间稍等
-        }
     }
 
     /**
