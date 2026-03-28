@@ -92,9 +92,9 @@ jobs:
       - name: Build Server
         run: |
           cd Scrcpy
-          ./gradlew :server:copyRelease --no-daemon
+          ./gradlew :server:assembleRelease --no-daemon
           echo "=== Server build output ==="
-          find Scrcpy/server/build -name "*.jar" -o -name "*.apk" 2>/dev/null || true
+          find Scrcpy/server/build -name "*.apk" 2>/dev/null || true
 
       - name: Copy Server to raw
         run: |
