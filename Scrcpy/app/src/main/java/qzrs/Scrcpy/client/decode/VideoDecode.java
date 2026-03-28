@@ -56,9 +56,10 @@ public class VideoDecode {
   public void decodeIn(ByteBuffer data) throws InterruptedException {
     try {
       long pts = data.getLong();
+      int dataSize = data.remaining(); // getLong之后剩余的数据大小
       int inIndex = intputBufferQueue.take();
       decodec.getInputBuffer(inIndex).put(data);
-      decodec.queueInputBuffer(inIndex, 0, data.capacity() - 8, pts, 0);
+      decodec.queueInputBuffer(inIndex, 0, dataSize, pts, 0);
     } catch (IllegalStateException ignored) {
     }
   }
