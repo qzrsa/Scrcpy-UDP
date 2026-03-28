@@ -111,7 +111,11 @@ public class UdpClientStream extends ClientStream {
             adb.pushFile(AppData.applicationContext.getResources().openRawResource(R.raw.scrcpy_server), serverName, null);
         }
         
-        // 获取shell
+        // 尝试杀掉旧的服务器进程（用单独的shell执行，避免缓冲区污染）
+        try { adb.runAdbCmd("pkill -f app_process"); } catch (Exception ignored) {}
+        Thread.sleep(500); // 等待旧进程完全退出
+        
+        // 获取新shell
         shell = adb.getShell();
         
         // 构建命令
@@ -224,20 +228,8 @@ public class UdpClientStream extends ClientStream {
 
     @Override
     public ByteBuffer readFrameFromVideo() throws Exception {
-        // UDP可用时优先使用UDP
-        if (udpVideoReady && udpVideoReceiver != null) {
-            try {
-                ByteBuffer frame = udpVideoReceiver.readFrame();
-                if (frame != null && frame.hasRemaining()) {
-                    return frame;
-                }
-            } catch (Exception e) {
-                Logger.w("UdpClientStream", "UDP读取失败: " + e.getMessage() + "，切换到TCP");
-                udpVideoReady = false;
-            }
-        }
-        
-        // UDP不可用或失败，使用TCP
+        // 直接使用TCP读取视频，UDP视频暂不可用
+        // TODO: 当UDP中继稳定后再启用UDP视频通道
         return super.readFrameFromVideo();
     }
 
@@ -300,17 +292,10 @@ public class UdpClientStream extends ClientStream {
         if (tcpVideoThread != null) tcpVideoThread.interrupt();
         try { if (mainSocket != null) mainSocket.close(); } catch (Exception ignored) {}
         try { if (videoSocket != null) videoSocket.close(); } catch (Exception ignored) {}
-        
-        // 杀掉服务器进程（异步执行，不阻塞关闭）
-        final Adb adbRef = this.adb;
-        new Thread(() -> {
-            try {
-                if (adbRef != null) {
-                    adbRef.runAdbCmd("pkill -f app_process");
-                }
-            } catch (Exception ignored) {}
-        }).start();
-        
-        if (shell != null) PublicTools.logToast("server", new String(shell.readByteArrayBeforeClose().array()), false);
+        // 不杀服务器进程，让Server.java的timeoutDelay自动清理
+        // 避免pkill导致shell缓冲区残留，影响下次连接
+        if (shell != null) {
+            try { shell.close(); } catch (Exception ignored) {}
+        }
     }
 }
