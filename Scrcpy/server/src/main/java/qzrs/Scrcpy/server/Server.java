@@ -160,10 +160,18 @@ public final class Server {
       serverSocket.close();
     }
 
-    // 暂时禁用UDP中继，TCP视频已正常工作
-    useUdpRelay = false;
-    udpRelaySender = null;
-    Log.e(TAG, "[UDP] UDP中继已禁用，使用TCP传输视频");
+    // 尝试连接UDP中继
+    String deviceId = "relay-" + Options.serverPort;
+    udpRelaySender = new UdpRelaySender();
+    Log.e(TAG, "[Server] 尝试连接UDP中继, deviceId=" + deviceId);
+    if (udpRelaySender.connect(deviceId)) {
+      useUdpRelay = true;
+      Log.e(TAG, "[UDP] UDP中继连接成功，启用UDP视频传输");
+    } else {
+      Log.e(TAG, "[UDP] UDP中继连接失败，使用TCP传输");
+      useUdpRelay = false;
+      udpRelaySender = null;
+    }
   }
 
   private static void executeVideoOut() {
