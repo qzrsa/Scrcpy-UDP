@@ -13,14 +13,20 @@ import qzrs.Scrcpy.helper.Logger;
 /**
  * UDP视频接收器
  * 接收服务端通过UDP中继发送的分片视频数据，重组后放入队列
+ * 
+ * 数据包格式（与服务器UdpRelaySender对应）：
+ * [类型:1][会话ID:16][seq:4][fragIndex:2][totalFrags:2][data:N]
  */
 public class UdpVideoReceiver {
 
+    private static final int HEADER_SIZE = 25; // 1+16+4+2+2
     private static final int MAX_UDP_PACKET = 65536;
+    
     private DatagramSocket socket;
     private Thread receiveThread;
     private boolean running = false;
     private final BlockingQueue<ByteBuffer> frameQueue = new LinkedBlockingQueue<>(30);
+    private String expectedSessionId;
 
     // 分片重组缓冲区: seq -> 分片数据
     private final Map<Integer, byte[][]> fragmentBuffers = new HashMap<>();
@@ -28,6 +34,10 @@ public class UdpVideoReceiver {
 
     public UdpVideoReceiver(DatagramSocket socket) {
         this.socket = socket;
+    }
+    
+    public void setExpectedSessionId(String sessionId) {
+        this.expectedSessionId = sessionId;
     }
 
     public void start() {
@@ -52,21 +62,49 @@ public class UdpVideoReceiver {
     }
 
     private void processPacket(byte[] data, int len) {
-        if (len < 12) return;
+        if (len < HEADER_SIZE) {
+            Logger.w("UdpVideoReceiver", "包太小: " + len);
+            return;
+        }
 
-        // 解析包头: [seq:4][totalLen:4][fragIndex:2][totalFrags:2][data:N]
-        int seq = ((data[0] & 0xFF) << 24) | ((data[1] & 0xFF) << 16)
-                | ((data[2] & 0xFF) << 8) | (data[3] & 0xFF);
-        int totalLen = ((data[4] & 0xFF) << 24) | ((data[5] & 0xFF) << 16)
-                | ((data[6] & 0xFF) << 8) | (data[7] & 0xFF);
-        int fragIndex = ((data[8] & 0xFF) << 8) | (data[9] & 0xFF);
-        int totalFrags = ((data[10] & 0xFF) << 8) | (data[11] & 0xFF);
-        int payloadLen = len - 12;
+        int pos = 0;
+        
+        // 解析包头:
+        // [类型:1][会话ID:16][seq:4][fragIndex:2][totalFrags:2][data:N]
+        
+        byte type = data[pos++]; // 类型: 0x04 (服务器->客户端)
+        
+        // 会话ID (16字节) - 验证是否匹配
+        String sessionId = new String(data, pos, 16).trim();
+        pos += 16;
+        
+        // 如果设置了期望的会话ID，验证
+        if (expectedSessionId != null && !expectedSessionId.equals(sessionId)) {
+            Logger.w("UdpVideoReceiver", "会话ID不匹配: " + sessionId + " != " + expectedSessionId);
+            return;
+        }
+        
+        // 序号 (4字节)
+        int seq = ((data[pos] & 0xFF) << 24) | ((data[pos + 1] & 0xFF) << 16)
+                | ((data[pos + 2] & 0xFF) << 8) | (data[pos + 3] & 0xFF);
+        pos += 4;
+        
+        // 分片索引 (2字节)
+        int fragIndex = ((data[pos] & 0xFF) << 8) | (data[pos + 1] & 0xFF);
+        pos += 2;
+        
+        // 总分片数 (2字节)
+        int totalFrags = ((data[pos] & 0xFF) << 8) | (data[pos + 1] & 0xFF);
+        pos += 2;
+        
+        int payloadLen = len - HEADER_SIZE;
+
+        Logger.d("UdpVideoReceiver", "收到UDP包: type=" + type + " session=" + sessionId + " seq=" + seq + " frag=" + fragIndex + "/" + totalFrags + " len=" + payloadLen);
 
         // 初始化分片缓冲区
         if (!fragmentBuffers.containsKey(seq)) {
             fragmentBuffers.put(seq, new byte[totalFrags][]);
-            fragmentMeta.put(seq, new int[]{totalLen, totalFrags, 0});
+            fragmentMeta.put(seq, new int[]{0, totalFrags, 0});
         }
 
         byte[][] frags = fragmentBuffers.get(seq);
@@ -74,19 +112,25 @@ public class UdpVideoReceiver {
 
         if (frags[fragIndex] == null) {
             frags[fragIndex] = new byte[payloadLen];
-            System.arraycopy(data, 12, frags[fragIndex], 0, payloadLen);
+            System.arraycopy(data, HEADER_SIZE, frags[fragIndex], 0, payloadLen);
             meta[2]++;
         }
 
         // 检查是否所有分片都收到了
         if (meta[2] == meta[1]) {
-            // 重组帧
-            byte[] frame = new byte[meta[0]];
-            int offset = 0;
+            // 计算总长度
+            int totalLen = 0;
             for (byte[] frag : frags) {
-                if (frag != null) {
-                    System.arraycopy(frag, 0, frame, offset, frag.length);
-                    offset += frag.length;
+                if (frag != null) totalLen += frag.length;
+            }
+            
+            // 重组帧
+            byte[] frame = new byte[totalLen];
+            int offset = 0;
+            for (int i = 0; i < frags.length; i++) {
+                if (frags[i] != null) {
+                    System.arraycopy(frags[i], 0, frame, offset, frags[i].length);
+                    offset += frags[i].length;
                 }
             }
             fragmentBuffers.remove(seq);
@@ -94,8 +138,11 @@ public class UdpVideoReceiver {
 
             // 放入队列
             try {
-                frameQueue.offer(ByteBuffer.wrap(frame));
-                Logger.d("UdpVideoReceiver", "帧重组完成: seq=" + seq + " size=" + frame.length);
+                if (frameQueue.offer(ByteBuffer.wrap(frame), 1, java.util.concurrent.TimeUnit.SECONDS)) {
+                    Logger.d("UdpVideoReceiver", "帧重组完成: seq=" + seq + " size=" + frame.length);
+                } else {
+                    Logger.w("UdpVideoReceiver", "帧队列满，丢弃: seq=" + seq);
+                }
             } catch (Exception e) {
                 Logger.e("UdpVideoReceiver", "帧入队失败: " + e.getMessage());
             }

@@ -166,32 +166,73 @@ public class UdpClientStream extends ClientStream {
     }
 
     /**
-     * 尝试建立UDP视频接收（暂时禁用，只用TCP）
+     * 尝试建立UDP视频接收
      */
     private void tryConnectUdpVideo() {
-        // 暂时禁用UDP，只用TCP视频
-        // TODO: 修复UDP分片重组逻辑后重新启用
-        Logger.w("UdpClientStream", "UDP视频暂时禁用，使用TCP视频");
-        udpVideoReady = false;
-        if (udpSocket != null) {
-            try { udpSocket.close(); } catch (Exception ignored) {}
-            udpSocket = null;
+        try {
+            udpSocket = new DatagramSocket();
+            udpSocket.setSoTimeout(3000);
+
+            // 注册到UDP中继
+            String deviceId = "client-" + android.os.Build.MODEL.replaceAll("[^a-zA-Z0-9]", "");
+            byte[] regPacket = new byte[64];
+            regPacket[0] = 0x01;
+            byte[] idBytes = deviceId.getBytes();
+            System.arraycopy(idBytes, 0, regPacket, 1, Math.min(idBytes.length, 32));
+
+            java.net.DatagramPacket sendPkt = new java.net.DatagramPacket(
+                regPacket, regPacket.length,
+                java.net.InetAddress.getByName(RELAY_HOST), RELAY_PORT);
+            udpSocket.send(sendPkt);
+
+            // 等待确认: [0x02][sessionId:16字节]
+            byte[] respBuf = new byte[17];
+            java.net.DatagramPacket respPkt = new java.net.DatagramPacket(respBuf, respBuf.length);
+            udpSocket.receive(respPkt);
+
+            if (respBuf[0] == 0x02) {
+                String sessionId = new String(respBuf, 1, 16).trim();
+                Logger.i("UdpClientStream", "UDP注册成功, sessionId=" + sessionId);
+                
+                // 设置会话ID并启动UDP接收
+                udpSocket.setSoTimeout(0);
+                udpVideoReceiver = new UdpVideoReceiver(udpSocket);
+                udpVideoReceiver.setExpectedSessionId(sessionId);
+                udpVideoReceiver.start();
+                udpVideoReady = true;
+                Logger.i("UdpClientStream", "UDP视频接收已启动");
+            } else {
+                Logger.w("UdpClientStream", "UDP注册响应无效");
+                udpSocket.close();
+            }
+        } catch (Exception e) {
+            Logger.w("UdpClientStream", "UDP连接失败: " + e.getMessage() + "，使用TCP");
+            udpVideoReady = false;
+            if (udpSocket != null) {
+                try { udpSocket.close(); } catch (Exception ignored) {}
+            }
         }
     }
 
     // ==================== 视频读取 ====================
-    // 注意：不覆盖 readByteFromVideo() 和 readIntFromVideo()
-    // 父类 ClientStream 的实现直接从 videoDataInputStream 读取，是正确的
 
     @Override
     public ByteBuffer readFrameFromVideo() throws Exception {
-        // UDP 禁用时，使用父类的 TCP 实现
-        if (!udpVideoReady) {
-            return super.readFrameFromVideo();
+        // UDP可用时优先使用UDP
+        if (udpVideoReady && udpVideoReceiver != null) {
+            try {
+                ByteBuffer frame = udpVideoReceiver.readFrame();
+                if (frame != null && frame.hasRemaining()) {
+                    return frame;
+                }
+            } catch (Exception e) {
+                Logger.w("UdpClientStream", "UDP读取失败: " + e.getMessage() + "，切换到TCP");
+                udpVideoReady = false;
+            }
         }
         
-        // UDP 可用时，从 UDP 队列读取（待实现）
-        throw new IOException("UDP video not implemented");
+        // UDP不可用或失败，使用TCP
+        return super.readFrameFromVideo();
     }
 
     // ==================== 控制通道（TCP）====================
