@@ -106,7 +106,7 @@ public class UdpClientStream extends ClientStream {
     }
 
     /**
-     * 启动Scrcpy服务器 - 用adb命令直接执行，不依赖shell写入
+     * 启动Scrcpy服务器 - 直接用单条shell命令执行
      */
     private void startScrcpyServer(Device device) throws Exception {
         if (BuildConfig.ENABLE_DEBUG_FEATURE || !adb.runAdbCmd("ls /data/local/tmp/scrcpy_*").contains(serverName)) {
@@ -114,51 +114,51 @@ public class UdpClientStream extends ClientStream {
             adb.pushFile(AppData.applicationContext.getResources().openRawResource(R.raw.scrcpy_server), serverName, null);
         }
 
-        // 构建参数字符串
-        String args = "serverPort=" + device.serverPort
-                + " listenClip=" + (device.listenClip ? 1 : 0)
-                + " isAudio=" + (device.isAudio ? 1 : 0)
-                + " maxSize=" + device.maxSize
-                + " maxFps=" + device.maxFps
-                + " maxVideoBit=" + device.maxVideoBit
-                + " keepAwake=" + (device.keepWakeOnRunning ? 1 : 0)
-                + " supportH265=" + ((device.useH265 && supportH265) ? 1 : 0)
-                + " supportOpus=" + (supportOpus ? 1 : 0)
-                + " startApp=" + device.startApp;
-
-        // 清空旧日志
-        adb.runAdbCmd("rm -f /data/local/tmp/server.log");
-        
-        // 构建脚本内容
-        String scriptContent = "#!/system/bin/sh\n" +
-                "CLASSPATH=" + serverName + "\n" +
-                "exec app_process / qzrs.Scrcpy.server.Server " + args + "\n";
-        
-        // 用printf写入脚本（adb.runAdbCmd单条命令，避免shell写入问题）
-        String escapedScript = scriptContent.replace("'", "'\\''");
-        adb.runAdbCmd("printf '%s' '" + escapedScript + "' > /data/local/tmp/start_server.sh");
-        adb.runAdbCmd("chmod +x /data/local/tmp/start_server.sh");
-        
-        // 查看脚本内容确认
-        String scriptContent2 = adb.runAdbCmd("cat /data/local/tmp/start_server.sh");
-        Logger.i("UdpClientStream", "脚本内容: " + scriptContent2.replace("\n", "\\n"));
-        
         // 杀掉可能存在的旧进程
-        adb.runAdbCmd("pkill -f scrcpy_server || true");
+        adb.runAdbCmd("pkill -f app_process || true");
         Thread.sleep(200);
+
+        // 构建启动命令 - 用CLASSPATH环境变量方式
+        String startApp = (device.startApp == null || device.startApp.isEmpty()) ? "" : " startApp=" + device.startApp;
+        String cmd = "CLASSPATH=" + serverName + " exec app_process / qzrs.Scrcpy.server.Server" +
+                " serverPort=" + device.serverPort +
+                " listenClip=" + (device.listenClip ? 1 : 0) +
+                " isAudio=" + (device.isAudio ? 1 : 0) +
+                " maxSize=" + device.maxSize +
+                " maxFps=" + device.maxFps +
+                " maxVideoBit=" + device.maxVideoBit +
+                " keepAwake=" + (device.keepWakeOnRunning ? 1 : 0) +
+                " supportH265=" + ((device.useH265 && supportH265) ? 1 : 0) +
+                " supportOpus=" + (supportOpus ? 1 : 0) +
+                startApp;
+
+        Logger.i("UdpClientStream", "启动命令: " + cmd);
         
-        // 用shell后台执行脚本
+        // 直接用shell执行，不后台运行（让shell退出后进程继续）
         shell = adb.getShell();
-        shell.write(ByteBuffer.wrap("nohup /data/local/tmp/start_server.sh > /data/local/tmp/server.log 2>&1 &\n".getBytes()));
+        
+        // 用nohup后台执行，整条命令一次发送
+        String fullCmd = "nohup sh -c 'CLASSPATH=" + serverName + " exec app_process / qzrs.Scrcpy.server.Server" +
+                " serverPort=" + device.serverPort +
+                " listenClip=" + (device.listenClip ? 1 : 0) +
+                " isAudio=" + (device.isAudio ? 1 : 0) +
+                " maxSize=" + device.maxSize +
+                " maxFps=" + device.maxFps +
+                " maxVideoBit=" + device.maxVideoBit +
+                " keepAwake=" + (device.keepWakeOnRunning ? 1 : 0) +
+                " supportH265=" + ((device.useH265 && supportH265) ? 1 : 0) +
+                " supportOpus=" + (supportOpus ? 1 : 0) +
+                startApp + "' > /dev/null 2>&1 &";
+        
+        Logger.i("UdpClientStream", "完整命令长度: " + fullCmd.length());
+        
+        // 发送命令
+        shell.write(ByteBuffer.wrap((fullCmd + "\n").getBytes()));
         Thread.sleep(3000);
         
-        // 查看日志确认启动
-        String log = adb.runAdbCmd("cat /data/local/tmp/server.log");
-        Logger.i("UdpClientStream", "服务器日志: " + log);
-        
-        // 检查进程是否在运行
-        String processes = adb.runAdbCmd("ps -A | grep scrcpy");
-        Logger.i("UdpClientStream", "服务器进程: " + processes);
+        // 检查进程
+        String processes = adb.runAdbCmd("ps -A | grep app_process");
+        Logger.i("UdpClientStream", "进程列表: " + processes);
     }
 
     /**
