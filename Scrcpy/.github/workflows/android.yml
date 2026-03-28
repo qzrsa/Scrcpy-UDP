@@ -22,13 +22,22 @@ jobs:
         java-version: '17'
         distribution: 'temurin'
     
+    - name: Debug - show raw directory before
+      run: |
+        echo "=== Current directory ==="
+        pwd
+        echo "=== List all files in res/raw ==="
+        find . -type f -path "*/res/raw/*" -ls || true
+        echo "=== Raw directory contents ==="
+        ls -laR Scrcpy/app/src/main/res/raw/ || true
+    
     - name: Clean raw directory
       run: |
-        echo "Before clean:"
-        ls -la Scrcpy/app/src/main/res/raw/ || true
+        echo "=== Cleaning raw directory ==="
         rm -rf Scrcpy/app/src/main/res/raw
-        echo "After clean:"
-        ls -la Scrcpy/app/src/main/res/ || true
+        mkdir -p Scrcpy/app/src/main/res/raw
+        echo "=== After clean ==="
+        ls -la Scrcpy/app/src/main/res/raw/ || true
     
     - name: Build Server Release
       run: |
@@ -37,9 +46,8 @@ jobs:
     
     - name: Copy Server to raw
       run: |
-        mkdir -p Scrcpy/app/src/main/res/raw
         cp server/build/outputs/apk/release/server-release-unsigned.apk Scrcpy/app/src/main/res/raw/scrcpy_server
-        echo "After copy:"
+        echo "=== After copy ==="
         ls -la Scrcpy/app/src/main/res/raw/
     
     - name: Build Debug APK
