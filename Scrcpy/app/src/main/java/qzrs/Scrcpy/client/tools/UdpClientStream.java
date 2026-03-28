@@ -113,6 +113,10 @@ public class UdpClientStream extends ClientStream {
         
         shell = adb.getShell();
         
+        // 清空shell缓冲区
+        shell.write(ByteBuffer.wrap("\n".getBytes()));
+        Thread.sleep(100);
+        
         // 分块写入命令，避免shell缓冲区溢出
         String[] cmdParts = {
             "app_process -Djava.class.path=" + serverName,
@@ -131,7 +135,7 @@ public class UdpClientStream extends ClientStream {
         
         for (String part : cmdParts) {
             shell.write(ByteBuffer.wrap(part.getBytes()));
-            Thread.sleep(10); // 每块之间稍等
+            Thread.sleep(20); // 每块之间稍等
         }
     }
 
@@ -273,7 +277,16 @@ public class UdpClientStream extends ClientStream {
 
     @Override
     public void writeToMain(ByteBuffer byteBuffer) throws Exception {
-        mainOutputStream.write(byteBuffer.array());
+        if (byteBuffer.hasArray()) {
+            byte[] array = byteBuffer.array();
+            int offset = byteBuffer.arrayOffset() + byteBuffer.position();
+            int remaining = byteBuffer.remaining();
+            mainOutputStream.write(array, offset, remaining);
+        } else {
+            byte[] data = new byte[byteBuffer.remaining()];
+            byteBuffer.get(data);
+            mainOutputStream.write(data);
+        }
         mainOutputStream.flush();
     }
 
