@@ -111,11 +111,6 @@ public class UdpClientStream extends ClientStream {
             adb.pushFile(AppData.applicationContext.getResources().openRawResource(R.raw.scrcpy_server), serverName, null);
         }
         
-        // 先杀掉旧的服务器进程
-        try {
-            adb.runAdbCmd("pkill -f app_process");
-        } catch (Exception ignored) {}
-        
         // 获取shell
         shell = adb.getShell();
         
@@ -305,6 +300,14 @@ public class UdpClientStream extends ClientStream {
         if (tcpVideoThread != null) tcpVideoThread.interrupt();
         try { if (mainSocket != null) mainSocket.close(); } catch (Exception ignored) {}
         try { if (videoSocket != null) videoSocket.close(); } catch (Exception ignored) {}
+        
+        // 杀掉服务器进程，为下次连接做准备
+        try {
+            if (adb != null) {
+                adb.runAdbCmd("pkill -f app_process");
+            }
+        } catch (Exception ignored) {}
+        
         if (shell != null) PublicTools.logToast("server", new String(shell.readByteArrayBeforeClose().array()), false);
     }
 }
