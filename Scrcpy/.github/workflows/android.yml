@@ -31,10 +31,18 @@ jobs:
         restore-keys: |
           ${{ runner.os }}-gradle-
     
-    - name: Build Debug APK
+    - name: Build Server Release
       run: |
         chmod +x gradlew
-        ./gradlew assembleDebug --no-daemon
+        ./gradlew :server:assembleRelease --no-daemon
+    
+    - name: Copy Server to raw
+      run: |
+        cp server/build/outputs/apk/release/server-release-unsigned.apk app/src/main/res/raw/scrcpy_server
+    
+    - name: Build Debug APK
+      run: |
+        ./gradlew :app:assembleDebug --no-daemon
     
     - name: Upload Debug APK
       uses: actions/upload-artifact@v4
