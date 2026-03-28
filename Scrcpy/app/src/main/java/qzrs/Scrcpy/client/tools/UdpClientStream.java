@@ -103,7 +103,7 @@ public class UdpClientStream extends ClientStream {
     }
 
     /**
-     * 启动Scrcpy服务器 - 使用shell后台启动
+     * 启动Scrcpy服务器 - 使用shell分块写入命令
      */
     private void startScrcpyServer(Device device) throws Exception {
         if (BuildConfig.ENABLE_DEBUG_FEATURE || !adb.runAdbCmd("ls /data/local/tmp/scrcpy_*").contains(serverName)) {
@@ -113,24 +113,32 @@ public class UdpClientStream extends ClientStream {
         
         // 杀掉旧服务器
         try { adb.runAdbCmd("pkill -f app_process"); } catch (Exception ignored) {}
-        Thread.sleep(300);
+        Thread.sleep(200);
         
-        // 用runAdbCmd直接启动服务器（后台运行）
-        String cmd = "nohup app_process -Djava.class.path=" + serverName + 
-            " / qzrs.Scrcpy.server.Server" +
-            " serverPort=" + device.serverPort +
-            " listenClip=" + (device.listenClip ? 1 : 0) +
-            " isAudio=" + (device.isAudio ? 1 : 0) +
-            " maxSize=" + device.maxSize +
-            " maxFps=" + device.maxFps +
-            " maxVideoBit=" + device.maxVideoBit +
-            " keepAwake=" + (device.keepWakeOnRunning ? 1 : 0) +
-            " supportH265=" + ((device.useH265 && supportH265) ? 1 : 0) +
-            " supportOpus=" + (supportOpus ? 1 : 0) +
-            " startApp=" + device.startApp +
-            " >/data/local/tmp/scrcpy.log 2>&1 &";
+        // 获取shell
+        shell = adb.getShell();
         
-        adb.runAdbCmd(cmd);
+        // 分块写入命令
+        String[] cmdParts = {
+            "nohup app_process -Djava.class.path=" + serverName,
+            " / qzrs.Scrcpy.server.Server",
+            " serverPort=" + device.serverPort,
+            " listenClip=" + (device.listenClip ? 1 : 0),
+            " isAudio=" + (device.isAudio ? 1 : 0),
+            " maxSize=" + device.maxSize,
+            " maxFps=" + device.maxFps,
+            " maxVideoBit=" + device.maxVideoBit,
+            " keepAwake=" + (device.keepWakeOnRunning ? 1 : 0),
+            " supportH265=" + ((device.useH265 && supportH265) ? 1 : 0),
+            " supportOpus=" + (supportOpus ? 1 : 0),
+            " startApp=" + device.startApp,
+            " >/data/local/tmp/srv.log 2>&1 &\n"
+        };
+        
+        for (String part : cmdParts) {
+            shell.write(ByteBuffer.wrap(part.getBytes()));
+            Thread.sleep(15);
+        }
     }
 
     /**
