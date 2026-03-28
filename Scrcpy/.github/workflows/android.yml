@@ -22,11 +22,13 @@ jobs:
         java-version: '17'
         distribution: 'temurin'
     
-    - name: Clean everything
+    - name: Clean raw directory
       run: |
-        rm -rf app/src/main/res/raw
-        rm -rf .gradle
-        rm -rf ~/.gradle/caches
+        echo "Before clean:"
+        ls -la Scrcpy/app/src/main/res/raw/ || true
+        rm -rf Scrcpy/app/src/main/res/raw
+        echo "After clean:"
+        ls -la Scrcpy/app/src/main/res/ || true
     
     - name: Build Server Release
       run: |
@@ -35,9 +37,10 @@ jobs:
     
     - name: Copy Server to raw
       run: |
-        mkdir -p app/src/main/res/raw
-        cp server/build/outputs/apk/release/server-release-unsigned.apk app/src/main/res/raw/scrcpy_server
-        ls -la app/src/main/res/raw/
+        mkdir -p Scrcpy/app/src/main/res/raw
+        cp server/build/outputs/apk/release/server-release-unsigned.apk Scrcpy/app/src/main/res/raw/scrcpy_server
+        echo "After copy:"
+        ls -la Scrcpy/app/src/main/res/raw/
     
     - name: Build Debug APK
       run: |
