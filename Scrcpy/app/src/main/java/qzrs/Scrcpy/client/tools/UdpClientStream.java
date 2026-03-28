@@ -2,7 +2,6 @@ package qzrs.Scrcpy.client.tools;
 
 import java.io.DataInputStream;
 import java.io.IOException;
-import java.io.OutputStream;
 import java.net.DatagramSocket;
 import java.net.InetSocketAddress;
 import java.net.Socket;
@@ -24,7 +23,9 @@ import qzrs.Scrcpy.network.UdpVideoReceiver;
 /**
  * UDP模式的ClientStream
  * - 控制通道：TCP（稳定可靠）
- * - 视频通道：UDP中继（低延迟）
+ * - 视频通道：TCP（暂时禁用UDP）
+ * 
+ * 重要：视频读取方法使用父类ClientStream的实现
  */
 public class UdpClientStream extends ClientStream {
 
@@ -36,15 +37,12 @@ public class UdpClientStream extends ClientStream {
     private static final boolean supportH265 = DecodecTools.isSupportH265();
     private static final boolean supportOpus = DecodecTools.isSupportOpus();
 
-    // TCP控制通道（复用父类字段）
-    // mainSocket, mainOutputStream, mainDataInputStream 继承自父类
-
     // UDP视频接收
     private DatagramSocket udpSocket;
     private UdpVideoReceiver udpVideoReceiver;
     private boolean udpVideoReady = false;
 
-    // TCP视频备用队列（UDP失败时使用）
+    // TCP视频队列
     private final BlockingQueue<ByteBuffer> tcpVideoQueue = new LinkedBlockingQueue<>();
     private Thread tcpVideoThread;
 
@@ -79,17 +77,16 @@ public class UdpClientStream extends ClientStream {
                 startScrcpyServer(device);
                 Logger.i("UdpClientStream", "服务器启动完成");
 
-                // 3. TCP连接（控制+视频备用）
+                // 3. TCP连接（控制+视频）
                 Logger.i("UdpClientStream", "步骤3: TCP连接...");
                 connectTcp(device);
                 Logger.i("UdpClientStream", "TCP连接成功");
 
-                // 4. 尝试建立UDP视频接收
-                Logger.i("UdpClientStream", "步骤4: 建立UDP视频接收...");
+                // 4. 尝试建立UDP视频接收（暂时禁用，只用TCP）
+                Logger.i("UdpClientStream", "步骤4: UDP视频接收...");
                 tryConnectUdpVideo();
-
                 Logger.i("UdpClientStream", "连接完成! UDP视频=" + udpVideoReady);
-                PublicTools.logToast("UDP", "连接成功! " + (udpVideoReady ? "UDP视频" : "TCP视频"), true);
+                PublicTools.logToast("UDP", "连接成功! " + (udpVideoReady ? "UDP" : "TCP") + "视频", true);
                 handle.run(true);
 
             } catch (Exception e) {
@@ -130,7 +127,7 @@ public class UdpClientStream extends ClientStream {
     }
 
     /**
-     * TCP连接（控制通道 + 视频备用通道）
+     * TCP连接（控制通道 + 视频通道）
      */
     private void connectTcp(Device device) throws Exception {
         Thread.sleep(50);
@@ -153,7 +150,7 @@ public class UdpClientStream extends ClientStream {
             }
         }
 
-        // 连接视频备用通道
+        // 连接视频通道
         for (int i = 0; i < retry; i++) {
             try {
                 videoSocket = new Socket();
@@ -166,37 +163,14 @@ public class UdpClientStream extends ClientStream {
                 Thread.sleep(300);
             }
         }
-
-        // 启动TCP视频备用线程
-        startTcpVideoThread();
     }
 
     /**
-     * 启动TCP视频备用线程（当UDP不可用时使用）
-     */
-    private void startTcpVideoThread() {
-        tcpVideoThread = new Thread(() -> {
-            try {
-                while (!isClose) {
-                    int size = videoDataInputStream.readInt();
-                    if (size <= 0 || size > 10 * 1024 * 1024) continue;
-                    byte[] data = new byte[size];
-                    videoDataInputStream.readFully(data);
-                    tcpVideoQueue.offer(ByteBuffer.wrap(data));
-                }
-            } catch (Exception e) {
-                if (!isClose) Logger.e("UdpClientStream", "TCP视频线程异常: " + e.getMessage());
-            }
-        });
-        tcpVideoThread.setDaemon(true);
-        tcpVideoThread.start();
-    }
-
-    /**
-     * 尝试建立UDP视频接收（暂时禁用，改用纯TCP）
+     * 尝试建立UDP视频接收（暂时禁用，只用TCP）
      */
     private void tryConnectUdpVideo() {
-        // 暂时禁用UDP视频，只用TCP
+        // 暂时禁用UDP，只用TCP视频
+        // TODO: 修复UDP分片重组逻辑后重新启用
         Logger.w("UdpClientStream", "UDP视频暂时禁用，使用TCP视频");
         udpVideoReady = false;
         if (udpSocket != null) {
@@ -205,55 +179,19 @@ public class UdpClientStream extends ClientStream {
         }
     }
 
-    // ==================== 视频读取（优先UDP，备用TCP）====================
+    // ==================== 视频读取 ====================
+    // 注意：不覆盖 readByteFromVideo() 和 readIntFromVideo()
+    // 父类 ClientStream 的实现直接从 videoDataInputStream 读取，是正确的
 
     @Override
-    public ByteBuffer readFrameFromVideo() throws IOException, InterruptedException {
-        // 只用TCP视频通道
-        Logger.d("UdpClientStream", "readFrameFromVideo: 读取TCP视频");
-        
-        if (connectDirect && videoDataInputStream != null) {
-            try {
-                int size = videoDataInputStream.readInt();
-                Logger.d("UdpClientStream", "TCP读取size: " + size);
-                if (size > 0 && size < 10 * 1024 * 1024) {
-                    byte[] data = new byte[size];
-                    videoDataInputStream.readFully(data);
-                    Logger.d("UdpClientStream", "TCP帧读取成功: " + data.length + " bytes");
-                    return ByteBuffer.wrap(data);
-                }
-            } catch (Exception e) {
-                Logger.e("UdpClientStream", "TCP读取异常: " + e.getMessage());
-                throw new IOException("TCP视频读取失败: " + e.getMessage());
-            }
+    public ByteBuffer readFrameFromVideo() throws Exception {
+        // UDP 禁用时，使用父类的 TCP 实现
+        if (!udpVideoReady) {
+            return super.readFrameFromVideo();
         }
         
-        throw new IOException("视频Socket未连接");
-    }
-
-    @Override
-    public byte readByteFromVideo() throws IOException, InterruptedException {
-        ByteBuffer buf = readFrameFromVideo();
-        return buf.get();
-    }
-
-    @Override
-    public int readIntFromVideo() throws IOException, InterruptedException {
-        ByteBuffer buf = readFrameFromVideo();
-        if (buf.remaining() >= 4) return buf.getInt();
-        // 从TCP直接读
-        return videoDataInputStream.readInt();
-    }
-
-    @Override
-    public ByteBuffer readByteArrayFromVideo(int size) throws IOException, InterruptedException {
-        if (udpVideoReady) {
-            return readFrameFromVideo();
-        } else {
-            byte[] data = new byte[size];
-            videoDataInputStream.readFully(data);
-            return ByteBuffer.wrap(data);
-        }
+        // UDP 可用时，从 UDP 队列读取（待实现）
+        throw new IOException("UDP video not implemented");
     }
 
     // ==================== 控制通道（TCP）====================
