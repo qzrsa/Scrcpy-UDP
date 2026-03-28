@@ -359,56 +359,66 @@ function handleRelayMessage(msg, rinfo) {
     
     if (type === 0x01) {
         // 注册包: [0x01][设备ID:32字节]
-        const deviceId = msg.slice(1, 33).toString().trim();
-        log('RELAY', `UDP registration from ${rinfo.address}:${rinfo.port} - Device: ${deviceId || 'unknown'}`);
+        const deviceId = msg.slice(1, 33).toString('ascii').trim();
+        log('RELAY', `UDP registration from ${rinfo.address}:${rinfo.port} - Device: "${deviceId}"`);
         
-        // 检查是否已有相同deviceId的session（用于客户端加入服务端的session）
+        // 检查是否已有相同deviceId的session
         let existingSession = null;
-        relaySessions.forEach((session, sid) => {
-            if (session.deviceId === deviceId && !session.clientPort) {
-                existingSession = sid;
+        for (const [sid, session] of relaySessions) {
+            if (session.deviceId === deviceId) {
+                existingSession = { sid, session };
+                break;
             }
-        });
+        }
         
-        if (existingSession) {
-            // 客户端注册，加入已有的session
-            const session = relaySessions.get(existingSession);
-            session.clientIp = rinfo.address;
-            session.clientPort = rinfo.port;
+        if (existingSession && !existingSession.session.clientPort) {
+            // 已有服务端session，客户端注册加入
+            existingSession.session.clientIp = rinfo.address;
+            existingSession.session.clientPort = rinfo.port;
             
-            // 发送确认，使用已有sessionId
             const response = Buffer.alloc(17);
             response[0] = 0x02;
-            response.write(existingSession, 1, 16);
+            response.write(existingSession.sid, 1, 16);
             udpRelaySocket.send(response, rinfo.port, rinfo.address);
-            log('RELAY', `Client joined session: ${existingSession}`);
+            log('RELAY', `Client joined session: ${existingSession.sid} (total sessions: ${relaySessions.size})`);
+        } else if (existingSession && existingSession.session.clientPort) {
+            // 已有客户端session，服务端注册加入
+            existingSession.session.deviceIp = rinfo.address;
+            existingSession.session.devicePort = rinfo.port;
+            
+            const response = Buffer.alloc(17);
+            response[0] = 0x02;
+            response.write(existingSession.sid, 1, 16);
+            udpRelaySocket.send(response, rinfo.port, rinfo.address);
+            log('RELAY', `Server joined session: ${existingSession.sid} (total sessions: ${relaySessions.size})`);
         } else {
-            // 服务端注册，创建新session
+            // 没有session，创建新的
             const sessionId = generateId();
             relaySessions.set(sessionId, {
                 deviceId: deviceId,
-                clientIp: null,     // 等待客户端注册
+                clientIp: null,
                 clientPort: null,
                 deviceIp: rinfo.address,
                 devicePort: rinfo.port,
                 createdAt: Date.now()
             });
             
-            // 发送确认
             const response = Buffer.alloc(17);
             response[0] = 0x02;
             response.write(sessionId, 1, 16);
             udpRelaySocket.send(response, rinfo.port, rinfo.address);
-            log('RELAY', `Registered device session: ${sessionId}`);
+            log('RELAY', `Registered new session: ${sessionId} (deviceId="${deviceId}", total sessions: ${relaySessions.size})`);
         }
         return;
     }
     
     // 转发数据包: [类型:1字节][会话ID:16字节][数据:N字节]
-    const sessionId = msg.slice(1, 17).toString();
+    const sessionId = msg.slice(1, 17).toString('ascii').trim();
+    log('RELAY', `Forwarding packet: type=${type}, sessionId="${sessionId}", sessions=${relaySessions.size}`);
+    
     const session = relaySessions.get(sessionId);
     if (!session) {
-        log('WARNING', `Unknown relay session: ${sessionId}`);
+        log('WARNING', `Unknown relay session: "${sessionId}"`);
         return;
     }
     
