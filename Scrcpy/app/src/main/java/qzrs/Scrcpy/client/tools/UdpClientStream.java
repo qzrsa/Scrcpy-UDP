@@ -84,7 +84,7 @@ public class UdpClientStream extends ClientStream {
 
                 // 4. 尝试建立UDP视频接收（暂时禁用，只用TCP）
                 Logger.i("UdpClientStream", "步骤4: UDP视频接收...");
-                tryConnectUdpVideo();
+                tryConnectUdpVideo(device.serverPort);
                 Logger.i("UdpClientStream", "连接完成! UDP视频=" + udpVideoReady);
                 PublicTools.logToast("UDP", "连接成功! " + (udpVideoReady ? "UDP" : "TCP") + "视频", true);
                 handle.run(true);
@@ -178,13 +178,13 @@ public class UdpClientStream extends ClientStream {
     /**
      * 尝试建立UDP视频接收
      */
-    private void tryConnectUdpVideo() {
+    private void tryConnectUdpVideo(int serverPort) {
         try {
             udpSocket = new DatagramSocket();
             udpSocket.setSoTimeout(3000);
 
-            // 注册到UDP中继
-            String deviceId = "client-" + android.os.Build.MODEL.replaceAll("[^a-zA-Z0-9]", "");
+            // 注册到UDP中继（使用serverPort作为deviceId，与服务端匹配）
+            String deviceId = "relay-" + serverPort;
             byte[] regPacket = new byte[64];
             regPacket[0] = 0x01;
             byte[] idBytes = deviceId.getBytes();
@@ -228,8 +228,20 @@ public class UdpClientStream extends ClientStream {
 
     @Override
     public ByteBuffer readFrameFromVideo() throws Exception {
-        // 直接使用TCP读取视频，UDP视频暂不可用
-        // TODO: 当UDP中继稳定后再启用UDP视频通道
+        // UDP可用时优先使用UDP（低延迟）
+        if (udpVideoReady && udpVideoReceiver != null) {
+            try {
+                ByteBuffer frame = udpVideoReceiver.readFrame();
+                if (frame != null && frame.hasRemaining()) {
+                    return frame;
+                }
+            } catch (Exception e) {
+                Logger.w("UdpClientStream", "UDP读取失败: " + e.getMessage() + "，切换到TCP");
+                udpVideoReady = false;
+            }
+        }
+        
+        // UDP不可用或失败，使用TCP
         return super.readFrameFromVideo();
     }
 

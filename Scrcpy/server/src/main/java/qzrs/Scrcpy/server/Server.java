@@ -161,7 +161,7 @@ public final class Server {
     }
 
     // 尝试连接UDP中继
-    String deviceId = "server-" + android.os.Build.MODEL.replaceAll("[^a-zA-Z0-9]", "");
+    String deviceId = "relay-" + Options.serverPort;
     udpRelaySender = new UdpRelaySender();
     if (udpRelaySender.connect(deviceId)) {
       useUdpRelay = true;
