@@ -6,6 +6,8 @@ import android.os.HandlerThread;
 import android.util.Pair;
 import android.view.Surface;
 
+import java.io.PrintWriter;
+import java.io.StringWriter;
 import java.nio.ByteBuffer;
 
 import qzrs.Scrcpy.client.Client;
@@ -121,7 +123,11 @@ public class ClientPlayer {
       }
     } catch (InterruptedException ignored) {
     } catch (Exception e) {
-      Logger.e("ClientPlayer", ">>> 视频流异常: " + e.getMessage(), e);
+      String msg = ">>> 视频流异常: " + (e.getMessage() != null ? e.getMessage() : e.getClass().getName());
+      Logger.e("ClientPlayer", msg);
+      StringWriter sw = new StringWriter();
+      e.printStackTrace(new PrintWriter(sw));
+      Logger.e("ClientPlayer", "堆栈: " + sw.toString());
     } finally {
       if (videoDecode != null) videoDecode.release();
       Logger.i("ClientPlayer", ">>> 视频流线程结束");
