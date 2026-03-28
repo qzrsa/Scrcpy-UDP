@@ -172,20 +172,32 @@ public final class Server {
   private static void executeVideoOut() {
     try {
       int frame = 0;
+      Log.e(TAG, "[Server] executeVideoOut 开始");
       while (!Thread.interrupted()) {
-        if (VideoEncode.isHasChangeConfig) {
-          VideoEncode.isHasChangeConfig = false;
-          VideoEncode.stopEncode();
-          VideoEncode.startEncode();
-        }
-        VideoEncode.encodeOut();
-        frame++;
-        if (frame > 120) {
-          if (System.currentTimeMillis() - lastKeepAliveTime > timeoutDelay) throw new IOException("连接断开");
-          frame = 0;
+        try {
+          if (VideoEncode.isHasChangeConfig) {
+            VideoEncode.isHasChangeConfig = false;
+            VideoEncode.stopEncode();
+            VideoEncode.startEncode();
+          }
+          VideoEncode.encodeOut();
+          frame++;
+          if (frame > 120) {
+            if (System.currentTimeMillis() - lastKeepAliveTime > timeoutDelay) {
+              Log.e(TAG, "[Server] 心跳超时");
+              throw new IOException("连接断开");
+            }
+            frame = 0;
+          }
+        } catch (IOException e) {
+          throw e;
+        } catch (Exception e) {
+          Log.e(TAG, "[Server] VideoEncode异常: " + e.getMessage());
+          throw new IOException(e);
         }
       }
     } catch (Exception e) {
+      Log.e(TAG, "[Server] executeVideoOut 结束: " + e.getMessage());
       errorClose(e);
     }
   }
@@ -253,19 +265,25 @@ public final class Server {
   public static void writeVideo(ByteBuffer byteBuffer) throws IOException {
     // 计算实际要发送的字节数
     int remaining = byteBuffer.remaining();
+    if (remaining <= 0) return;
     
-    // 如果ByteBuffer是数组-backed，使用正确的数据和偏移量
-    if (byteBuffer.hasArray()) {
-      byte[] array = byteBuffer.array();
-      int offset = byteBuffer.arrayOffset() + byteBuffer.position();
-      videoOutputStream.write(array, offset, remaining);
-      videoOutputStream.flush();
-    } else {
-      // 如果是直接ByteBuffer，转换为字节数组
-      byte[] data = new byte[remaining];
-      byteBuffer.get(data);
-      videoOutputStream.write(data);
-      videoOutputStream.flush();
+    try {
+      // 如果ByteBuffer是数组-backed，使用正确的数据和偏移量
+      if (byteBuffer.hasArray()) {
+        byte[] array = byteBuffer.array();
+        int offset = byteBuffer.arrayOffset() + byteBuffer.position();
+        videoOutputStream.write(array, offset, remaining);
+        videoOutputStream.flush();
+      } else {
+        // 如果是直接ByteBuffer，转换为字节数组
+        byte[] data = new byte[remaining];
+        byteBuffer.get(data);
+        videoOutputStream.write(data);
+        videoOutputStream.flush();
+      }
+    } catch (IOException e) {
+      Log.e(TAG, "[Server] writeVideo失败: " + e.getMessage());
+      throw e;
     }
     
     // 如果UDP可用，也向UDP发送（低延迟）
@@ -281,7 +299,7 @@ public final class Server {
           udpRelaySender.sendVideo(udpBuffer);
         }
       } catch (Exception e) {
-        System.out.println("[UDP] 发送失败: " + e.getMessage());
+        Log.e(TAG, "[Server] UDP发送失败: " + e.getMessage());
       }
     }
   }
