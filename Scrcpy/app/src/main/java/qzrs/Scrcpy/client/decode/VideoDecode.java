@@ -60,7 +60,8 @@ public class VideoDecode {
       int inIndex = intputBufferQueue.take();
       decodec.getInputBuffer(inIndex).put(data);
       decodec.queueInputBuffer(inIndex, 0, dataSize, pts, 0);
-    } catch (IllegalStateException ignored) {
+    } catch (IllegalStateException e) {
+      android.util.Log.e("VideoDecode", "decodeIn error: " + e.getMessage());
     }
   }
 

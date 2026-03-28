@@ -301,12 +301,15 @@ public class UdpClientStream extends ClientStream {
         try { if (mainSocket != null) mainSocket.close(); } catch (Exception ignored) {}
         try { if (videoSocket != null) videoSocket.close(); } catch (Exception ignored) {}
         
-        // 杀掉服务器进程，为下次连接做准备
-        try {
-            if (adb != null) {
-                adb.runAdbCmd("pkill -f app_process");
-            }
-        } catch (Exception ignored) {}
+        // 杀掉服务器进程（异步执行，不阻塞关闭）
+        final Adb adbRef = this.adb;
+        new Thread(() -> {
+            try {
+                if (adbRef != null) {
+                    adbRef.runAdbCmd("pkill -f app_process");
+                }
+            } catch (Exception ignored) {}
+        }).start();
         
         if (shell != null) PublicTools.logToast("server", new String(shell.readByteArrayBeforeClose().array()), false);
     }
