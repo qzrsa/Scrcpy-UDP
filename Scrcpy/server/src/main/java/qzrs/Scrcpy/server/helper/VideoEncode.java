@@ -10,6 +10,7 @@ import android.media.MediaFormat;
 import android.os.Build;
 import android.os.IBinder;
 import android.system.ErrnoException;
+import android.util.Log;
 import android.view.Surface;
 
 import java.io.IOException;
@@ -30,18 +31,24 @@ public final class VideoEncode {
   private static IBinder display;
 
   public static void init() throws InvocationTargetException, NoSuchMethodException, IllegalAccessException, IOException, ErrnoException {
+    Log.e("VideoEncode", ">>> VideoEncode.init 开始");
     useH265 = Options.supportH265 && EncodecTools.isSupportH265();
     ByteBuffer byteBuffer = ByteBuffer.allocate(9);
     byteBuffer.put((byte) (useH265 ? 1 : 0));
     byteBuffer.putInt(Device.videoSize.first);
     byteBuffer.putInt(Device.videoSize.second);
     byteBuffer.flip();
+    Log.e("VideoEncode", ">>> 发送视频头: " + (useH265 ? "H265" : "H264") + " " + Device.videoSize.first + "x" + Device.videoSize.second);
     Server.writeVideo(byteBuffer);
     // 创建显示器
+    Log.e("VideoEncode", ">>> 创建显示器...");
     display = SurfaceControl.createDisplay("easycontrol", Build.VERSION.SDK_INT < Build.VERSION_CODES.R || (Build.VERSION.SDK_INT == Build.VERSION_CODES.R && !"S".equals(Build.VERSION.CODENAME)));
+    Log.e("VideoEncode", ">>> 创建编码器...");
     // 创建Codec
     createEncodecFormat();
+    Log.e("VideoEncode", ">>> 启动编码器...");
     startEncode();
+    Log.e("VideoEncode", ">>> VideoEncode.init 完成");
   }
 
   private static void createEncodecFormat() throws IOException {
