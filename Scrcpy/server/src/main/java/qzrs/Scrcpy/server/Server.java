@@ -251,13 +251,35 @@ public final class Server {
   }
 
   public static void writeVideo(ByteBuffer byteBuffer) throws IOException {
-    // 始终向TCP写入视频数据（作为主通道或备用通道）
-    videoOutputStream.write(byteBuffer.array());
+    // 计算实际要发送的字节数
+    int remaining = byteBuffer.remaining();
+    
+    // 如果ByteBuffer是数组-backed，使用正确的数据和偏移量
+    if (byteBuffer.hasArray()) {
+      byte[] array = byteBuffer.array();
+      int offset = byteBuffer.arrayOffset() + byteBuffer.position();
+      videoOutputStream.write(array, offset, remaining);
+      videoOutputStream.flush();
+    } else {
+      // 如果是直接ByteBuffer，转换为字节数组
+      byte[] data = new byte[remaining];
+      byteBuffer.get(data);
+      videoOutputStream.write(data);
+      videoOutputStream.flush();
+    }
     
     // 如果UDP可用，也向UDP发送（低延迟）
     if (useUdpRelay && udpRelaySender != null && udpRelaySender.isConnected()) {
       try {
-        udpRelaySender.sendVideo(byteBuffer);
+        // 只发送原始数据（不含长度前缀）
+        if (byteBuffer.hasArray()) {
+          byte[] array = byteBuffer.array();
+          int offset = byteBuffer.arrayOffset() + byteBuffer.position();
+          ByteBuffer udpBuffer = ByteBuffer.allocate(remaining);
+          udpBuffer.put(array, offset, remaining);
+          udpBuffer.flip();
+          udpRelaySender.sendVideo(udpBuffer);
+        }
       } catch (Exception e) {
         System.out.println("[UDP] 发送失败: " + e.getMessage());
       }
