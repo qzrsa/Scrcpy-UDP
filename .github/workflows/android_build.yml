@@ -74,6 +74,15 @@ jobs:
           echo "New versionCode=${NEW_CODE}"
           echo "New versionName=${{ inputs.app_version_name }}"
 
+      - name: Clean raw directory
+        run: |
+          echo "=== Before clean ==="
+          find Scrcpy -type f -path "*/res/raw/*" -ls || true
+          rm -rf Scrcpy/app/src/main/res/raw
+          mkdir -p Scrcpy/app/src/main/res/raw
+          echo "=== After clean ==="
+          ls -la Scrcpy/app/src/main/res/raw/
+
       - name: Grant execute permission for gradlew
         run: chmod +x Scrcpy/gradlew
 
@@ -81,6 +90,21 @@ jobs:
         run: |
           cd Scrcpy
           ./gradlew :server:copyRelease --no-daemon
+          echo "=== Server build output ==="
+          find Scrcpy/server/build -name "*.jar" -o -name "*.apk" 2>/dev/null || true
+
+      - name: Copy Server to raw
+        run: |
+          mkdir -p Scrcpy/app/src/main/res/raw
+          if [ -f Scrcpy/server/build/outputs/apk/release/server-release-unsigned.apk ]; then
+            cp Scrcpy/server/build/outputs/apk/release/server-release-unsigned.apk Scrcpy/app/src/main/res/raw/scrcpy_server
+          else
+            echo "ERROR: Server APK not found!"
+            find Scrcpy/server/build -name "*.apk" 2>/dev/null || true
+            exit 1
+          fi
+          echo "=== After copy ==="
+          ls -la Scrcpy/app/src/main/res/raw/
 
       - name: Build App
         run: |
