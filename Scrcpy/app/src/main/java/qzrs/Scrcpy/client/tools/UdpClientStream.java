@@ -267,11 +267,14 @@ public class UdpClientStream extends ClientStream {
 
     @Override
     public ByteBuffer readFrameFromVideo() throws IOException, InterruptedException {
+        Logger.d("UdpClientStream", "readFrameFromVideo: UDP=" + udpVideoReady + " TCP=" + connectDirect);
+        
         // 优先使用UDP
         if (udpVideoReady && udpVideoReceiver != null) {
             try {
                 ByteBuffer frame = udpVideoReceiver.readFrame();
                 if (frame != null && frame.remaining() > 0) {
+                    Logger.d("UdpClientStream", "UDP帧读取成功: " + frame.remaining() + " bytes");
                     return frame;
                 }
                 Logger.w("UdpClientStream", "UDP帧为空，尝试TCP备用");
@@ -284,9 +287,11 @@ public class UdpClientStream extends ClientStream {
         if (connectDirect && videoDataInputStream != null) {
             try {
                 int size = videoDataInputStream.readInt();
+                Logger.d("UdpClientStream", "TCP读取size: " + size);
                 if (size > 0 && size < 10 * 1024 * 1024) {
                     byte[] data = new byte[size];
                     videoDataInputStream.readFully(data);
+                    Logger.d("UdpClientStream", "TCP帧读取成功: " + data.length + " bytes");
                     return ByteBuffer.wrap(data);
                 }
             } catch (Exception e) {
@@ -295,8 +300,15 @@ public class UdpClientStream extends ClientStream {
         }
         
         // 最后尝试TCP视频队列
-        ByteBuffer buf = tcpVideoQueue.poll(1, java.util.concurrent.TimeUnit.SECONDS);
-        if (buf != null) return buf;
+        try {
+            ByteBuffer buf = tcpVideoQueue.poll(2, java.util.concurrent.TimeUnit.SECONDS);
+            if (buf != null) {
+                Logger.d("UdpClientStream", "TCP队列帧读取成功: " + buf.remaining() + " bytes");
+                return buf;
+            }
+        } catch (InterruptedException e) {
+            throw e;
+        }
         
         throw new IOException("无法读取视频帧（UDP和TCP都失败）");
     }

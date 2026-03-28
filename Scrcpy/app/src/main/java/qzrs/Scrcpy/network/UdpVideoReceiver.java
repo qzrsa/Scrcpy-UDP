@@ -103,10 +103,14 @@ public class UdpVideoReceiver {
     }
 
     /**
-     * 读取下一帧（阻塞）
+     * 读取下一帧（阻塞，带超时）
      */
     public ByteBuffer readFrame() throws InterruptedException {
-        return frameQueue.take();
+        ByteBuffer frame = frameQueue.poll(5, java.util.concurrent.TimeUnit.SECONDS);
+        if (frame == null) {
+            Logger.w("UdpVideoReceiver", "读取帧超时，队列状态: " + frameQueue.size());
+        }
+        return frame;
     }
 
     public void stop() {
