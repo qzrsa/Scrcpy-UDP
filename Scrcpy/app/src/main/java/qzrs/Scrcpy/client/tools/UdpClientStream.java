@@ -103,7 +103,7 @@ public class UdpClientStream extends ClientStream {
     }
 
     /**
-     * 启动Scrcpy服务器 - 使用shell写入命令
+     * 启动Scrcpy服务器 - 使用shell后台启动
      */
     private void startScrcpyServer(Device device) throws Exception {
         if (BuildConfig.ENABLE_DEBUG_FEATURE || !adb.runAdbCmd("ls /data/local/tmp/scrcpy_*").contains(serverName)) {
@@ -111,15 +111,12 @@ public class UdpClientStream extends ClientStream {
             adb.pushFile(AppData.applicationContext.getResources().openRawResource(R.raw.scrcpy_server), serverName, null);
         }
         
-        // 尝试杀掉旧的服务器进程（用单独的shell执行，避免缓冲区污染）
+        // 杀掉旧服务器
         try { adb.runAdbCmd("pkill -f app_process"); } catch (Exception ignored) {}
-        Thread.sleep(500); // 等待旧进程完全退出
+        Thread.sleep(300);
         
-        // 获取新shell
-        shell = adb.getShell();
-        
-        // 构建命令
-        String cmd = "app_process -Djava.class.path=" + serverName + 
+        // 用runAdbCmd直接启动服务器（后台运行）
+        String cmd = "nohup app_process -Djava.class.path=" + serverName + 
             " / qzrs.Scrcpy.server.Server" +
             " serverPort=" + device.serverPort +
             " listenClip=" + (device.listenClip ? 1 : 0) +
@@ -130,10 +127,10 @@ public class UdpClientStream extends ClientStream {
             " keepAwake=" + (device.keepWakeOnRunning ? 1 : 0) +
             " supportH265=" + ((device.useH265 && supportH265) ? 1 : 0) +
             " supportOpus=" + (supportOpus ? 1 : 0) +
-            " startApp=" + device.startApp + "\n";
+            " startApp=" + device.startApp +
+            " >/data/local/tmp/scrcpy.log 2>&1 &";
         
-        // 写入命令
-        shell.write(ByteBuffer.wrap(cmd.getBytes()));
+        adb.runAdbCmd(cmd);
     }
 
     /**
