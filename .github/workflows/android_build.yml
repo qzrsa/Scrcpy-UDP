@@ -1,3 +1,6 @@
+# Build workflow for Scrcpy-UDP
+# Updated: 2026-03-28 09:30 GMT+8
+
 name: Build and Release Android App
 
 on:
