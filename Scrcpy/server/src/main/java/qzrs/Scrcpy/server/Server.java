@@ -48,6 +48,10 @@ public final class Server {
 
   public static void main(String... args) {
     Log.e(TAG, "[Server] ========== Server启动 ==========");
+    Log.e(TAG, "[Server] 接收参数数量: " + args.length);
+    for (int i = 0; i < args.length; i++) {
+      Log.e(TAG, "[Server] 参数" + i + ": " + args[i]);
+    }
     try {
       Thread timeOutThread = new Thread(() -> {
         try {
