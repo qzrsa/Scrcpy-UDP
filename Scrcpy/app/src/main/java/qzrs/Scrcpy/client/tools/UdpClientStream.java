@@ -126,21 +126,39 @@ public class UdpClientStream extends ClientStream {
                 + " supportOpus=" + (supportOpus ? 1 : 0)
                 + " startApp=" + device.startApp;
 
-        // 写入脚本文件（用adb命令，不用shell写入）
-        String scriptContent = "#!/system/bin/sh\nexport CLASSPATH=" + serverName + "\nexec app_process / qzrs.Scrcpy.server.Server " + args + "\n";
+        // 清空旧日志
+        adb.runAdbCmd("rm -f /data/local/tmp/server.log");
         
-        // 用printf写入脚本（避免echo的转义问题）
-        adb.runAdbCmd("printf '%s' '" + scriptContent.replace("'", "'\\''") + "' > /data/local/tmp/start_server.sh");
+        // 构建脚本内容
+        String scriptContent = "#!/system/bin/sh\n" +
+                "CLASSPATH=" + serverName + "\n" +
+                "exec app_process / qzrs.Scrcpy.server.Server " + args + "\n";
+        
+        // 用printf写入脚本（adb.runAdbCmd单条命令，避免shell写入问题）
+        String escapedScript = scriptContent.replace("'", "'\\''");
+        adb.runAdbCmd("printf '%s' '" + escapedScript + "' > /data/local/tmp/start_server.sh");
         adb.runAdbCmd("chmod +x /data/local/tmp/start_server.sh");
+        
+        // 查看脚本内容确认
+        String scriptContent2 = adb.runAdbCmd("cat /data/local/tmp/start_server.sh");
+        Logger.i("UdpClientStream", "脚本内容: " + scriptContent2.replace("\n", "\\n"));
+        
+        // 杀掉可能存在的旧进程
+        adb.runAdbCmd("pkill -f scrcpy_server || true");
+        Thread.sleep(200);
         
         // 用shell后台执行脚本
         shell = adb.getShell();
         shell.write(ByteBuffer.wrap("nohup /data/local/tmp/start_server.sh > /data/local/tmp/server.log 2>&1 &\n".getBytes()));
-        Thread.sleep(2000);
+        Thread.sleep(3000);
         
         // 查看日志确认启动
         String log = adb.runAdbCmd("cat /data/local/tmp/server.log");
         Logger.i("UdpClientStream", "服务器日志: " + log);
+        
+        // 检查进程是否在运行
+        String processes = adb.runAdbCmd("ps -A | grep scrcpy");
+        Logger.i("UdpClientStream", "服务器进程: " + processes);
     }
 
     /**
