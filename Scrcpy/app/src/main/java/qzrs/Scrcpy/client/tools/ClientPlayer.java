@@ -80,27 +80,38 @@ public class ClientPlayer {
     VideoDecode videoDecode = null;
     try {
       Logger.i("ClientPlayer", ">>> 视频流线程启动");
-      boolean useH265 = clientStream.readByteFromVideo() == 1;
-      Logger.i("ClientPlayer", ">>> 读取编码格式: " + (useH265 ? "H265" : "H264"));
       
-      Pair<Integer, Integer> videoSize = new Pair<>(clientStream.readIntFromVideo(), clientStream.readIntFromVideo());
-      Logger.i("ClientPlayer", ">>> 视频分辨率: " + videoSize.first + "x" + videoSize.second);
+      // 读取编码格式
+      byte codecByte = clientStream.readByteFromVideo();
+      boolean useH265 = codecByte == 1;
+      Logger.i("ClientPlayer", ">>> 读取编码格式: " + (useH265 ? "H265" : "H264") + " (byte=" + codecByte + ")");
+      
+      // 读取视频分辨率
+      int videoWidth = clientStream.readIntFromVideo();
+      int videoHeight = clientStream.readIntFromVideo();
+      Logger.i("ClientPlayer", ">>> 视频分辨率: " + videoWidth + "x" + videoHeight);
       
       Surface surface = new Surface(clientController.getTextureView().getSurfaceTexture());
       Logger.i("ClientPlayer", ">>> Surface已获取");
       
+      // 读取CSD数据
       ByteBuffer csd0 = clientStream.readFrameFromVideo();
       Logger.i("ClientPlayer", ">>> CSD0已读取: " + csd0.remaining() + " bytes");
       
       ByteBuffer csd1 = useH265 ? null : clientStream.readFrameFromVideo();
       if (csd1 != null) Logger.i("ClientPlayer", ">>> CSD1已读取: " + csd1.remaining() + " bytes");
       
-      videoDecode = new VideoDecode(videoSize, surface, csd0, csd1, playHandler);
-      Logger.i("ClientPlayer", ">>> VideoDecode已创建");
+      videoDecode = new VideoDecode(new Pair<>(videoWidth, videoHeight), surface, csd0, csd1, playHandler);
+      Logger.i("ClientPlayer", ">>> VideoDecode已创建，开始解码循环");
       
       int frameCount = 0;
       while (!Thread.interrupted()) {
         ByteBuffer frame = clientStream.readFrameFromVideo();
+        if (frame == null) {
+          Logger.w("ClientPlayer", ">>> 视频帧为null，继续等待...");
+          Thread.sleep(100);
+          continue;
+        }
         if (statsOverlay != null) statsOverlay.onVideoFrame(frame.remaining());
         videoDecode.decodeIn(frame);
         frameCount++;
@@ -108,6 +119,7 @@ public class ClientPlayer {
           Logger.d("ClientPlayer", ">>> 已解码 " + frameCount + " 帧");
         }
       }
+    } catch (InterruptedException ignored) {
     } catch (Exception e) {
       Logger.e("ClientPlayer", ">>> 视频流异常: " + e.getMessage(), e);
     } finally {

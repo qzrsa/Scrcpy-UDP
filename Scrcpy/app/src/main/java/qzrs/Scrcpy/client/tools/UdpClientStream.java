@@ -267,11 +267,38 @@ public class UdpClientStream extends ClientStream {
 
     @Override
     public ByteBuffer readFrameFromVideo() throws IOException, InterruptedException {
+        // 优先使用UDP
         if (udpVideoReady && udpVideoReceiver != null) {
-            return udpVideoReceiver.readFrame();
-        } else {
-            return tcpVideoQueue.take();
+            try {
+                ByteBuffer frame = udpVideoReceiver.readFrame();
+                if (frame != null && frame.remaining() > 0) {
+                    return frame;
+                }
+                Logger.w("UdpClientStream", "UDP帧为空，尝试TCP备用");
+            } catch (Exception e) {
+                Logger.e("UdpClientStream", "UDP读取异常: " + e.getMessage());
+            }
         }
+        
+        // UDP失败，使用TCP备用通道
+        if (connectDirect && videoDataInputStream != null) {
+            try {
+                int size = videoDataInputStream.readInt();
+                if (size > 0 && size < 10 * 1024 * 1024) {
+                    byte[] data = new byte[size];
+                    videoDataInputStream.readFully(data);
+                    return ByteBuffer.wrap(data);
+                }
+            } catch (Exception e) {
+                Logger.e("UdpClientStream", "TCP备用读取异常: " + e.getMessage());
+            }
+        }
+        
+        // 最后尝试TCP视频队列
+        ByteBuffer buf = tcpVideoQueue.poll(1, java.util.concurrent.TimeUnit.SECONDS);
+        if (buf != null) return buf;
+        
+        throw new IOException("无法读取视频帧（UDP和TCP都失败）");
     }
 
     @Override
