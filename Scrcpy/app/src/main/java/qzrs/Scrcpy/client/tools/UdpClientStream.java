@@ -106,59 +106,27 @@ public class UdpClientStream extends ClientStream {
     }
 
     /**
-     * 启动Scrcpy服务器 - 直接用单条shell命令执行
+     * 启动Scrcpy服务器 - 使用与ClientStream相同的方式
      */
     private void startScrcpyServer(Device device) throws Exception {
         if (BuildConfig.ENABLE_DEBUG_FEATURE || !adb.runAdbCmd("ls /data/local/tmp/scrcpy_*").contains(serverName)) {
             adb.runAdbCmd("rm /data/local/tmp/scrcpy_* ");
             adb.pushFile(AppData.applicationContext.getResources().openRawResource(R.raw.scrcpy_server), serverName, null);
         }
-
-        // 杀掉可能存在的旧进程
-        adb.runAdbCmd("pkill -f app_process || true");
-        Thread.sleep(200);
-
-        // 构建启动命令 - 用CLASSPATH环境变量方式
-        String startApp = (device.startApp == null || device.startApp.isEmpty()) ? "" : " startApp=" + device.startApp;
-        String cmd = "CLASSPATH=" + serverName + " exec app_process / qzrs.Scrcpy.server.Server" +
-                " serverPort=" + device.serverPort +
-                " listenClip=" + (device.listenClip ? 1 : 0) +
-                " isAudio=" + (device.isAudio ? 1 : 0) +
-                " maxSize=" + device.maxSize +
-                " maxFps=" + device.maxFps +
-                " maxVideoBit=" + device.maxVideoBit +
-                " keepAwake=" + (device.keepWakeOnRunning ? 1 : 0) +
-                " supportH265=" + ((device.useH265 && supportH265) ? 1 : 0) +
-                " supportOpus=" + (supportOpus ? 1 : 0) +
-                startApp;
-
-        Logger.i("UdpClientStream", "启动命令: " + cmd);
         
-        // 直接用shell执行，不后台运行（让shell退出后进程继续）
+        // 使用和ClientStream一样的方式启动服务器
         shell = adb.getShell();
-        
-        // 用nohup后台执行，整条命令一次发送
-        String fullCmd = "nohup sh -c 'CLASSPATH=" + serverName + " exec app_process / qzrs.Scrcpy.server.Server" +
-                " serverPort=" + device.serverPort +
-                " listenClip=" + (device.listenClip ? 1 : 0) +
-                " isAudio=" + (device.isAudio ? 1 : 0) +
-                " maxSize=" + device.maxSize +
-                " maxFps=" + device.maxFps +
-                " maxVideoBit=" + device.maxVideoBit +
-                " keepAwake=" + (device.keepWakeOnRunning ? 1 : 0) +
-                " supportH265=" + ((device.useH265 && supportH265) ? 1 : 0) +
-                " supportOpus=" + (supportOpus ? 1 : 0) +
-                startApp + "' > /dev/null 2>&1 &";
-        
-        Logger.i("UdpClientStream", "完整命令长度: " + fullCmd.length());
-        
-        // 发送命令
-        shell.write(ByteBuffer.wrap((fullCmd + "\n").getBytes()));
-        Thread.sleep(3000);
-        
-        // 检查进程
-        String processes = adb.runAdbCmd("ps -A | grep app_process");
-        Logger.i("UdpClientStream", "进程列表: " + processes);
+        shell.write(ByteBuffer.wrap(("app_process -Djava.class.path=" + serverName + " / qzrs.Scrcpy.server.Server"
+            + " serverPort=" + device.serverPort
+            + " listenClip=" + (device.listenClip ? 1 : 0)
+            + " isAudio=" + (device.isAudio ? 1 : 0)
+            + " maxSize=" + device.maxSize
+            + " maxFps=" + device.maxFps
+            + " maxVideoBit=" + device.maxVideoBit
+            + " keepAwake=" + (device.keepWakeOnRunning ? 1 : 0)
+            + " supportH265=" + ((device.useH265 && supportH265) ? 1 : 0)
+            + " supportOpus=" + (supportOpus ? 1 : 0)
+            + " startApp=" + device.startApp + "\n").getBytes()));
     }
 
     /**
