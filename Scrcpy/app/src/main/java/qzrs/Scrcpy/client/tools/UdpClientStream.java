@@ -106,7 +106,7 @@ public class UdpClientStream extends ClientStream {
     }
 
     /**
-     * 启动Scrcpy服务器
+     * 启动Scrcpy服务器 - 使用nohup后台执行
      */
     private void startScrcpyServer(Device device) throws Exception {
         if (BuildConfig.ENABLE_DEBUG_FEATURE || !adb.runAdbCmd("ls /data/local/tmp/scrcpy_*").contains(serverName)) {
@@ -114,39 +114,38 @@ public class UdpClientStream extends ClientStream {
             adb.pushFile(AppData.applicationContext.getResources().openRawResource(R.raw.scrcpy_server), serverName, null);
         }
         
+        // 使用echo写入启动脚本，避免shell缓冲区问题
+        String scriptPath = "/data/local/tmp/start_server.sh";
+        
+        // 删除旧脚本
+        adb.runAdbCmd("rm -f " + scriptPath);
+        
+        // 分块写入脚本内容
+        String[] lines = {
+            "#!/system/bin/sh",
+            "CLASSPATH=" + serverName,
+            "nohup app_process / qzrs.Scrcpy.server.Server \\",
+            "serverPort=" + device.serverPort + " \\",
+            "listenClip=" + (device.listenClip ? 1 : 0) + " \\",
+            "isAudio=" + (device.isAudio ? 1 : 0) + " \\",
+            "maxSize=" + device.maxSize + " \\",
+            "maxFps=" + device.maxFps + " \\",
+            "maxVideoBit=" + device.maxVideoBit + " \\",
+            "keepAwake=" + (device.keepWakeOnRunning ? 1 : 0) + " \\",
+            "supportH265=" + ((device.useH265 && supportH265) ? 1 : 0) + " \\",
+            "supportOpus=" + (supportOpus ? 1 : 0) + " \\",
+            "startApp=" + device.startApp + " > /dev/null 2>&1 &"
+        };
+        
         shell = adb.getShell();
         
-        // 分多次写入，避免缓冲区溢出
-        shell.write(ByteBuffer.wrap("export CLASSPATH=".getBytes()));
-        Thread.sleep(50);
-        shell.write(ByteBuffer.wrap(serverName.getBytes()));
-        Thread.sleep(50);
-        shell.write(ByteBuffer.wrap("\n".getBytes()));
-        Thread.sleep(50);
+        for (String line : lines) {
+            shell.write(ByteBuffer.wrap((line + "\n").getBytes()));
+            Thread.sleep(100);
+        }
         
-        shell.write(ByteBuffer.wrap("exec app_process / qzrs.Scrcpy.server.Server".getBytes()));
-        Thread.sleep(50);
-        shell.write(ByteBuffer.wrap((" serverPort=" + device.serverPort).getBytes()));
-        Thread.sleep(50);
-        shell.write(ByteBuffer.wrap((" listenClip=" + (device.listenClip ? 1 : 0)).getBytes()));
-        Thread.sleep(50);
-        shell.write(ByteBuffer.wrap((" isAudio=" + (device.isAudio ? 1 : 0)).getBytes()));
-        Thread.sleep(50);
-        shell.write(ByteBuffer.wrap((" maxSize=" + device.maxSize).getBytes()));
-        Thread.sleep(50);
-        shell.write(ByteBuffer.wrap((" maxFps=" + device.maxFps).getBytes()));
-        Thread.sleep(50);
-        shell.write(ByteBuffer.wrap((" maxVideoBit=" + device.maxVideoBit).getBytes()));
-        Thread.sleep(50);
-        shell.write(ByteBuffer.wrap((" keepAwake=" + (device.keepWakeOnRunning ? 1 : 0)).getBytes()));
-        Thread.sleep(50);
-        shell.write(ByteBuffer.wrap((" supportH265=" + ((device.useH265 && supportH265) ? 1 : 0)).getBytes()));
-        Thread.sleep(50);
-        shell.write(ByteBuffer.wrap((" supportOpus=" + (supportOpus ? 1 : 0)).getBytes()));
-        Thread.sleep(50);
-        shell.write(ByteBuffer.wrap((" startApp=" + device.startApp).getBytes()));
-        Thread.sleep(50);
-        shell.write(ByteBuffer.wrap("\n".getBytes()));
+        // 执行脚本
+        shell.write(ByteBuffer.wrap(("sh " + scriptPath + "\n").getBytes()));
         Thread.sleep(500);
     }
 
