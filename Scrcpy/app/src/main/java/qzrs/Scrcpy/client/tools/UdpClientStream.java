@@ -106,47 +106,41 @@ public class UdpClientStream extends ClientStream {
     }
 
     /**
-     * 启动Scrcpy服务器 - 使用nohup后台执行
+     * 启动Scrcpy服务器 - 用adb命令直接执行，不依赖shell写入
      */
     private void startScrcpyServer(Device device) throws Exception {
         if (BuildConfig.ENABLE_DEBUG_FEATURE || !adb.runAdbCmd("ls /data/local/tmp/scrcpy_*").contains(serverName)) {
             adb.runAdbCmd("rm /data/local/tmp/scrcpy_* ");
             adb.pushFile(AppData.applicationContext.getResources().openRawResource(R.raw.scrcpy_server), serverName, null);
         }
+
+        // 构建参数字符串
+        String args = "serverPort=" + device.serverPort
+                + " listenClip=" + (device.listenClip ? 1 : 0)
+                + " isAudio=" + (device.isAudio ? 1 : 0)
+                + " maxSize=" + device.maxSize
+                + " maxFps=" + device.maxFps
+                + " maxVideoBit=" + device.maxVideoBit
+                + " keepAwake=" + (device.keepWakeOnRunning ? 1 : 0)
+                + " supportH265=" + ((device.useH265 && supportH265) ? 1 : 0)
+                + " supportOpus=" + (supportOpus ? 1 : 0)
+                + " startApp=" + device.startApp;
+
+        // 写入脚本文件（用adb命令，不用shell写入）
+        String scriptContent = "#!/system/bin/sh\nexport CLASSPATH=" + serverName + "\nexec app_process / qzrs.Scrcpy.server.Server " + args + "\n";
         
-        // 使用echo写入启动脚本，避免shell缓冲区问题
-        String scriptPath = "/data/local/tmp/start_server.sh";
+        // 用printf写入脚本（避免echo的转义问题）
+        adb.runAdbCmd("printf '%s' '" + scriptContent.replace("'", "'\\''") + "' > /data/local/tmp/start_server.sh");
+        adb.runAdbCmd("chmod +x /data/local/tmp/start_server.sh");
         
-        // 删除旧脚本
-        adb.runAdbCmd("rm -f " + scriptPath);
-        
-        // 分块写入脚本内容
-        String[] lines = {
-            "#!/system/bin/sh",
-            "CLASSPATH=" + serverName,
-            "nohup app_process / qzrs.Scrcpy.server.Server \\",
-            "serverPort=" + device.serverPort + " \\",
-            "listenClip=" + (device.listenClip ? 1 : 0) + " \\",
-            "isAudio=" + (device.isAudio ? 1 : 0) + " \\",
-            "maxSize=" + device.maxSize + " \\",
-            "maxFps=" + device.maxFps + " \\",
-            "maxVideoBit=" + device.maxVideoBit + " \\",
-            "keepAwake=" + (device.keepWakeOnRunning ? 1 : 0) + " \\",
-            "supportH265=" + ((device.useH265 && supportH265) ? 1 : 0) + " \\",
-            "supportOpus=" + (supportOpus ? 1 : 0) + " \\",
-            "startApp=" + device.startApp + " > /dev/null 2>&1 &"
-        };
-        
+        // 用shell后台执行脚本
         shell = adb.getShell();
+        shell.write(ByteBuffer.wrap("nohup /data/local/tmp/start_server.sh > /data/local/tmp/server.log 2>&1 &\n".getBytes()));
+        Thread.sleep(2000);
         
-        for (String line : lines) {
-            shell.write(ByteBuffer.wrap((line + "\n").getBytes()));
-            Thread.sleep(100);
-        }
-        
-        // 执行脚本
-        shell.write(ByteBuffer.wrap(("sh " + scriptPath + "\n").getBytes()));
-        Thread.sleep(500);
+        // 查看日志确认启动
+        String log = adb.runAdbCmd("cat /data/local/tmp/server.log");
+        Logger.i("UdpClientStream", "服务器日志: " + log);
     }
 
     /**
