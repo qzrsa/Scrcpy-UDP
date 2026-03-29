@@ -376,9 +376,12 @@ function handleRelayMessage(msg, rinfo) {
             existingSession.session.clientIp = rinfo.address;
             existingSession.session.clientPort = rinfo.port;
             
+            // 发送确认，使用16字节sessionId
             const response = Buffer.alloc(17);
             response[0] = 0x02;
-            response.write(existingSession.sid, 1, 16);
+            const sessionIdBytes = Buffer.alloc(16);
+            sessionIdBytes.write(existingSession.sid);
+            sessionIdBytes.copy(response, 1);
             udpRelaySocket.send(response, rinfo.port, rinfo.address);
             log('RELAY', `Client joined session: ${existingSession.sid} (total sessions: ${relaySessions.size})`);
         } else if (existingSession && existingSession.session.clientPort) {
@@ -386,15 +389,20 @@ function handleRelayMessage(msg, rinfo) {
             existingSession.session.deviceIp = rinfo.address;
             existingSession.session.devicePort = rinfo.port;
             
+            // 发送确认，使用16字节sessionId
             const response = Buffer.alloc(17);
             response[0] = 0x02;
-            response.write(existingSession.sid, 1, 16);
+            const sessionIdBytes = Buffer.alloc(16);
+            sessionIdBytes.write(existingSession.sid);
+            sessionIdBytes.copy(response, 1);
             udpRelaySocket.send(response, rinfo.port, rinfo.address);
             log('RELAY', `Server joined session: ${existingSession.sid} (total sessions: ${relaySessions.size})`);
         } else {
             // 没有session，创建新的
             const sessionId = generateId();
-            relaySessions.set(sessionId, {
+            // 存储时清理null字符
+            const cleanSessionId = sessionId.replace(/\0+$/, '').trim();
+            relaySessions.set(cleanSessionId, {
                 deviceId: deviceId,
                 clientIp: null,
                 clientPort: null,
@@ -403,17 +411,21 @@ function handleRelayMessage(msg, rinfo) {
                 createdAt: Date.now()
             });
             
+            // 发送确认，使用16字节sessionId（不足的用null填充）
             const response = Buffer.alloc(17);
             response[0] = 0x02;
-            response.write(sessionId, 1, 16);
+            const sessionIdBytes = Buffer.alloc(16);
+            sessionIdBytes.write(cleanSessionId);
+            sessionIdBytes.copy(response, 1);
             udpRelaySocket.send(response, rinfo.port, rinfo.address);
-            log('RELAY', `Registered new session: ${sessionId} (deviceId="${deviceId}", total sessions: ${relaySessions.size})`);
+            log('RELAY', `Registered new session: "${cleanSessionId}" (deviceId="${deviceId}", total sessions: ${relaySessions.size})`);
         }
         return;
     }
     
     // 转发数据包: [类型:1字节][会话ID:16字节][数据:N字节]
-    const sessionId = msg.slice(1, 17).toString('ascii').trim();
+    // 注意：sessionId可能包含null字符，需要清理
+    const sessionId = msg.slice(1, 17).toString('ascii').replace(/\0+$/, '').trim();
     log('RELAY', `Forwarding packet: type=${type}, sessionId="${sessionId}", sessions=${relaySessions.size}`);
     
     const session = relaySessions.get(sessionId);
