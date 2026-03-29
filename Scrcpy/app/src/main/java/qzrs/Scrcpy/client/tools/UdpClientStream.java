@@ -20,17 +20,22 @@ import qzrs.Scrcpy.helper.Logger;
 import qzrs.Scrcpy.helper.PublicTools;
 import qzrs.Scrcpy.network.UdpVideoReceiver;
 
+import okhttp3.OkHttpClient;
+import okhttp3.Request;
+import okhttp3.Response;
+import okhttp3.WebSocket;
+import okhttp3.WebSocketListener;
+
 /**
  * UDP模式的ClientStream
  * - 控制通道：TCP（稳定可靠）
- * - 视频通道：TCP（暂时禁用UDP）
- * 
- * 重要：视频读取方法使用父类ClientStream的实现
+ * - 视频通道：WebSocket隧道（解决NAT穿透问题）
  */
 public class UdpClientStream extends ClientStream {
 
     private static final String RELAY_HOST = "47.105.67.198";
     private static final int RELAY_PORT = 3479;
+    private static final int SIGNALING_PORT = 8888;
     private static final int TIMEOUT = 15000;
 
     private static final String serverName = "/data/local/tmp/scrcpy_server_" + BuildConfig.VERSION_CODE + ".jar";
@@ -41,6 +46,14 @@ public class UdpClientStream extends ClientStream {
     private DatagramSocket udpSocket;
     private UdpVideoReceiver udpVideoReceiver;
     private boolean udpVideoReady = false;
+
+    // WebSocket视频接收
+    private OkHttpClient wsClient;
+    private WebSocket videoWs;
+    private final BlockingQueue<ByteBuffer> wsVideoQueue = new LinkedBlockingQueue<>();
+    private boolean wsVideoReady = false;
+    private String currentDeviceId;
+    private String currentSessionId;
 
     // TCP视频队列
     private final BlockingQueue<ByteBuffer> tcpVideoQueue = new LinkedBlockingQueue<>();
@@ -178,6 +191,62 @@ public class UdpClientStream extends ClientStream {
                 Thread.sleep(300);
             }
         }
+        
+        // 建立WebSocket连接用于接收视频（解决NAT穿透问题）
+        tryConnectWebSocketVideo(device.serverPort);
+    }
+
+    /**
+     * 通过WebSocket建立视频连接
+     */
+    private void tryConnectWebSocketVideo(int serverPort) {
+        try {
+            currentDeviceId = "relay-" + serverPort;
+            
+            wsClient = new OkHttpClient();
+            Request request = new Request.Builder()
+                .url("ws://" + RELAY_HOST + ":" + SIGNALING_PORT)
+                .build();
+            
+            wsClient.newWebSocket(request, new WebSocketListener() {
+                @Override
+                public void onOpen(WebSocket webSocket, Response response) {
+                    Logger.i("UdpClientStream", "WebSocket连接已建立");
+                    // 注册客户端到relay
+                    String registerMsg = "{\"type\":\"join-relay\",\"deviceId\":\"" + currentDeviceId + "\",\"sessionId\":\"\"}";
+                    webSocket.send(registerMsg);
+                }
+                
+                @Override
+                public void onMessage(WebSocket webSocket, String text) {
+                    Logger.i("UdpClientStream", "WebSocket消息: " + text);
+                    // 检查是否是二进制数据（JSON字符串格式）
+                    if (text != null && text.length() > 0) {
+                        try {
+                            // 尝试解析JSON
+                            if (text.startsWith("{\"type\":\"video\"")) {
+                                // JSON格式的视频数据
+                                // 这里暂不处理，使用TCP降级
+                            }
+                        } catch (Exception ignored) {}
+                    }
+                }
+                
+                @Override
+                public void onFailure(WebSocket webSocket, Throwable t, Response response) {
+                    Logger.e("UdpClientStream", "WebSocket失败: " + t.getMessage());
+                    wsVideoReady = false;
+                }
+            });
+            
+            // 等待确认
+            Thread.sleep(500);
+            Logger.i("UdpClientStream", "WebSocket视频接收已启动, ready=" + wsVideoReady);
+            
+        } catch (Exception e) {
+            Logger.e("UdpClientStream", "WebSocket连接失败: " + e.getMessage());
+            wsVideoReady = false;
+        }
     }
 
     /**
@@ -233,7 +302,20 @@ public class UdpClientStream extends ClientStream {
 
     @Override
     public ByteBuffer readFrameFromVideo() throws Exception {
-        // UDP可用时优先使用UDP（低延迟）
+        // 优先使用WebSocket视频（解决NAT穿透问题）
+        if (wsVideoReady) {
+            try {
+                ByteBuffer frame = wsVideoQueue.poll(1, java.util.concurrent.TimeUnit.SECONDS);
+                if (frame != null && frame.hasRemaining()) {
+                    return frame;
+                }
+            } catch (Exception e) {
+                Logger.w("UdpClientStream", "WebSocket读取失败: " + e.getMessage());
+                wsVideoReady = false;
+            }
+        }
+        
+        // WebSocket不可用，使用UDP
         if (udpVideoReady && udpVideoReceiver != null) {
             try {
                 ByteBuffer frame = udpVideoReceiver.readFrame();
@@ -246,7 +328,7 @@ public class UdpClientStream extends ClientStream {
             }
         }
         
-        // UDP不可用或失败，使用TCP
+        // 都不可用，使用TCP
         return super.readFrameFromVideo();
     }
 

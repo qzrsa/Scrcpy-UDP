@@ -127,6 +127,11 @@ function handleMessage(clientId, data) {
             handleRegisterClient(clientId, data);
             break;
             
+        case 'join-relay':
+            // 客户端加入UDP relay session，通过WebSocket接收视频
+            handleJoinRelay(clientId, data);
+            break;
+            
         case 'get-devices':
             handleGetDevices(clientId);
             break;
@@ -199,6 +204,41 @@ function handleRegisterClient(clientId, data) {
     
     // 发送设备列表
     handleGetDevices(clientId);
+}
+
+// ============ 客户端加入UDP relay ============
+function handleJoinRelay(clientId, data) {
+    const client = clients.get(clientId);
+    const sessionId = data.sessionId;
+    const deviceId = data.deviceId;
+    
+    // 查找对应的session
+    let targetSession = null;
+    for (const [sid, session] of relaySessions) {
+        if (session.deviceId === deviceId) {
+            targetSession = session;
+            break;
+        }
+    }
+    
+    if (targetSession) {
+        // 记录客户端的WebSocket ID用于转发
+        targetSession.clientWsId = clientId;
+        
+        // 发送确认
+        client.ws.send(JSON.stringify({
+            type: 'relay-joined',
+            deviceId: deviceId,
+            sessionId: targetSession.sid || sessionId
+        }));
+        
+        log('RELAY', `Client ${clientId} joined relay session for device ${deviceId}`);
+    } else {
+        client.ws.send(JSON.stringify({
+            type: 'error',
+            message: 'Relay session not found'
+        }));
+    }
 }
 
 // ============ 获取设备列表 ============
@@ -403,9 +443,11 @@ function handleRelayMessage(msg, rinfo) {
             // 存储时清理null字符
             const cleanSessionId = sessionId.replace(/\0+$/, '').trim();
             relaySessions.set(cleanSessionId, {
+                sid: cleanSessionId,  // 保存sessionId
                 deviceId: deviceId,
                 clientIp: null,
                 clientPort: null,
+                clientWsId: null,
                 deviceIp: rinfo.address,
                 devicePort: rinfo.port,
                 createdAt: Date.now()
@@ -426,7 +468,6 @@ function handleRelayMessage(msg, rinfo) {
     // 转发数据包: [类型:1字节][会话ID:16字节][数据:N字节]
     // 注意：sessionId可能包含null字符，需要清理
     const sessionId = msg.slice(1, 17).toString('ascii').replace(/\0+$/, '').trim();
-    log('RELAY', `Forwarding packet: type=${type}, sessionId="${sessionId}", sessions=${relaySessions.size}`);
     
     const session = relaySessions.get(sessionId);
     if (!session) {
@@ -438,6 +479,20 @@ function handleRelayMessage(msg, rinfo) {
     
     // 转发给对方
     if (type === 0x03) { // 设备 -> 客户端
+        // 优先通过WebSocket转发（解决NAT问题）
+        if (session.clientWsId) {
+            const clientWs = clients.get(session.clientWsId);
+            if (clientWs && clientWs.ws.readyState === WebSocket.OPEN) {
+                // 通过WebSocket发送二进制数据
+                // 格式: [0xFD][data:N] (0xFD = video data标识)
+                const wsPacket = Buffer.alloc(1 + data.length);
+                wsPacket[0] = 0xFD;
+                data.copy(wsPacket, 1);
+                clientWs.ws.send(wsPacket);
+                return;
+            }
+        }
+        // 降级到UDP转发
         if (session.clientIp && session.clientPort) {
             udpRelaySocket.send(data, session.clientPort, session.clientIp);
         } else {
