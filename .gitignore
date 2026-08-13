@@ -1,0 +1,16 @@
+keystore.properties
+
+Scrcpy/*.iml
+Scrcpy/.gradle
+Scrcpy/.idea
+Scrcpy/local.properties
+
+Scrcpy/app/build
+Scrcpy/app/.gradle
+Scrcpy/app/debug
+Scrcpy/app/release
+Scrcpy/app/src/main/res/raw/scrcpy_server.jar
+
+Scrcpy/server/build
+Scrcpy/server/.gradle
+
