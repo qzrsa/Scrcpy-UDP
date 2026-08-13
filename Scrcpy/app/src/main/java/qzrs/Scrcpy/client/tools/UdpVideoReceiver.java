@@ -76,8 +76,6 @@ public class UdpVideoReceiver {
         socket.receive(packet);
         if (packet.getLength() < 9) continue; // 太短，忽略（握手回显等异常包）
         parsePacket(buf, packet.getLength());
-      } catch (InterruptedException ignored) {
-        break;
       } catch (Exception ignored) {
         if (closed) break;
       }
@@ -150,8 +148,9 @@ public class UdpVideoReceiver {
       int skipTo = maxSeq;
       for (Integer k : frags.keySet()) skipTo = Math.min(skipTo, k);
       for (Integer k : readyRecords.keySet()) skipTo = Math.min(skipTo, k);
-      frags.keySet().removeIf(k -> k < skipTo);
-      readyRecords.keySet().removeIf(k -> k < skipTo);
+      final int finalSkipTo = skipTo;
+      frags.keySet().removeIf(k -> k < finalSkipTo);
+      readyRecords.keySet().removeIf(k -> k < finalSkipTo);
       nextExpectedSeq = skipTo;
       if (onPacketLoss != null) onPacketLoss.run();
     }
