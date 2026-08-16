@@ -4,11 +4,11 @@ plugins {
 
 android {
   namespace 'qzrs.Scrcpy.server'
-  compileSdk 36
+  compileSdk 34
 
   defaultConfig {
     minSdk 21
-    targetSdk 36
+    targetSdk 34
     applicationId 'qzrs.Scrcpy.server'
     versionCode 30304
     versionName '3.3.4'

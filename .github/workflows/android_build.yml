@@ -46,28 +46,37 @@ jobs:
           distribution: 'temurin'
           cache: gradle
 
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
       - name: Decode Keystore and Setup Properties
         run: |
           echo "MY_KEYSTORE_FILE=upload_keystore.jks" > keystore.properties
-          echo "MY_KEY_ALIAS=${{ secrets.KEY_ALIAS }}" >> keystore.properties
-          echo "MY_KEY_PASSWORD=${{ secrets.KEY_PASSWORD }}" >> keystore.properties
-          echo "MY_KEYSTORE_PASSWORD=${{ secrets.STORE_PASSWORD }}" >> keystore.properties
-
-          mkdir -p Scrcpy/app
-          echo "${{ secrets.SIGNING_KEY }}" | base64 -d > Scrcpy/app/upload_keystore.jks
+          if [ -n "${{ secrets.KEY_ALIAS }}" ] && [ -n "${{ secrets.SIGNING_KEY }}" ]; then
+            echo "MY_KEY_ALIAS=${{ secrets.KEY_ALIAS }}" >> keystore.properties
+            echo "MY_KEY_PASSWORD=${{ secrets.KEY_PASSWORD }}" >> keystore.properties
+            echo "MY_KEYSTORE_PASSWORD=${{ secrets.STORE_PASSWORD }}" >> keystore.properties
+            mkdir -p Scrcpy/app
+            echo "${{ secrets.SIGNING_KEY }}" | base64 -d > Scrcpy/app/upload_keystore.jks
+          else
+            echo "MY_KEY_ALIAS=" >> keystore.properties
+            echo "MY_KEY_PASSWORD=" >> keystore.properties
+            echo "MY_KEYSTORE_PASSWORD=" >> keystore.properties
+            echo "::warning::SIGNING_KEY / KEY_ALIAS 未配置，将构建【未签名】release APK（无法直接安装，仅用于调试）。正式发布请在仓库 Settings → Secrets 配置 KEY_ALIAS / KEY_PASSWORD / STORE_PASSWORD / SIGNING_KEY。"
+          fi
 
       - name: Update Android Version
         id: version
         run: |
           INPUT_CODE="${{ inputs.app_version_code }}"
           if [ "$INPUT_CODE" = "0" ] || [ -z "$INPUT_CODE" ]; then
-            CURRENT_CODE=$(grep -oP 'versionCode\\s+\\K\\d+' Scrcpy/app/build.gradle | head -1)
+            CURRENT_CODE=$(grep -oP 'versionCode\s+\K\d+' Scrcpy/app/build.gradle | head -1)
             NEW_CODE=$((CURRENT_CODE + 1))
           else
             NEW_CODE="$INPUT_CODE"
           fi
 
-          sed -i "s/versionCode [0-9]\\+/versionCode ${NEW_CODE}/" Scrcpy/app/build.gradle
+          sed -i "s/versionCode [0-9]\+/versionCode ${NEW_CODE}/" Scrcpy/app/build.gradle
           sed -i 's/versionName ".*"/versionName "${{ inputs.app_version_name }}"/' Scrcpy/app/build.gradle
 
           echo "new_version_code=${NEW_CODE}" >> $GITHUB_OUTPUT
