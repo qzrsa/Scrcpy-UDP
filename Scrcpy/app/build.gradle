@@ -63,6 +63,9 @@ android {
       proguardFiles 'proguard-rules.pro'
       if (hasKeystore) {
         signingConfig signingConfigs.release
+      } else {
+        // 未配置正式密钥时回退到 debug 签名，保证产物可被安装（仅用于自测，非正式发布）
+        signingConfig signingConfigs.debug
       }
     }
   }
