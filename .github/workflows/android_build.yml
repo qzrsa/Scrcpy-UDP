@@ -51,18 +51,18 @@ jobs:
 
       - name: Decode Keystore and Setup Properties
         run: |
-          echo "MY_KEYSTORE_FILE=upload_keystore.jks" > keystore.properties
           if [ -n "${{ secrets.KEY_ALIAS }}" ] && [ -n "${{ secrets.SIGNING_KEY }}" ]; then
-            echo "MY_KEY_ALIAS=${{ secrets.KEY_ALIAS }}" >> keystore.properties
-            echo "MY_KEY_PASSWORD=${{ secrets.KEY_PASSWORD }}" >> keystore.properties
-            echo "MY_KEYSTORE_PASSWORD=${{ secrets.STORE_PASSWORD }}" >> keystore.properties
+            {
+              echo "MY_KEYSTORE_FILE=upload_keystore.jks"
+              echo "MY_KEY_ALIAS=${{ secrets.KEY_ALIAS }}"
+              echo "MY_KEY_PASSWORD=${{ secrets.KEY_PASSWORD }}"
+              echo "MY_KEYSTORE_PASSWORD=${{ secrets.STORE_PASSWORD }}"
+            } > keystore.properties
             mkdir -p Scrcpy/app
             echo "${{ secrets.SIGNING_KEY }}" | base64 -d > Scrcpy/app/upload_keystore.jks
+            echo "Signing config written."
           else
-            echo "MY_KEY_ALIAS=" >> keystore.properties
-            echo "MY_KEY_PASSWORD=" >> keystore.properties
-            echo "MY_KEYSTORE_PASSWORD=" >> keystore.properties
-            echo "::warning::SIGNING_KEY / KEY_ALIAS 未配置，将构建【未签名】release APK（无法直接安装，仅用于调试）。正式发布请在仓库 Settings → Secrets 配置 KEY_ALIAS / KEY_PASSWORD / STORE_PASSWORD / SIGNING_KEY。"
+            echo "::warning::SIGNING_KEY / KEY_ALIAS 未配置，将构建【未签名】release APK（无法直接安装，仅用于调试）。正式发布请在仓库 Settings -> Secrets 配置 KEY_ALIAS / KEY_PASSWORD / STORE_PASSWORD / SIGNING_KEY。"
           fi
 
       - name: Update Android Version

@@ -5,9 +5,17 @@ plugins {
 def keystorePropertiesFile = rootProject.file('../keystore.properties')
 def keystoreProperties = new Properties()
 def hasKeystore = false
+def keystoreFileObj = null
 if (keystorePropertiesFile.exists()) {
     keystoreProperties.load(new FileInputStream(keystorePropertiesFile))
-    hasKeystore = true
+    def kf = keystoreProperties['MY_KEYSTORE_FILE']
+    if (kf != null && kf.trim()) {
+        def f = file(kf)
+        if (f.exists()) {
+            hasKeystore = true
+            keystoreFileObj = f
+        }
+    }
 }
 
 android {
@@ -32,7 +40,7 @@ android {
   signingConfigs {
       release {
         if (hasKeystore) {
-          storeFile file(keystoreProperties['MY_KEYSTORE_FILE'])
+          storeFile keystoreFileObj
           storePassword keystoreProperties['MY_KEYSTORE_PASSWORD']
           keyAlias keystoreProperties['MY_KEY_ALIAS']
           keyPassword keystoreProperties['MY_KEY_PASSWORD']
